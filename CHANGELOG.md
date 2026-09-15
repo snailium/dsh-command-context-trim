@@ -5,6 +5,12 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Integration tests against the **real** `ctx.tokenMeter` (bare cordis context + stub projection registry): a trim's
+  measured saving equals the `compaction/prune` shadow price it claims minus the replacement marker, and a *fresh* meter
+  folding the replayed log reaches the identical total — the replay property the claim exists for.
+
 ## [0.1.0] - 2026-09-15
 
 ### Added

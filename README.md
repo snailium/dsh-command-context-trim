@@ -128,18 +128,21 @@ npm run link:harness   # or resolve @deepseek-ai from a local dsh installation i
 ```
 
 Tests cover the pure planner and argument parser, the surface mutation against a real `Session` (including log replay),
-and the plugin's command registration and end-to-end trim over a stub context. CI runs the suite on Node 22 and 24;
+the plugin's command registration and end-to-end trim over a stub context, and — against the real `ctx.tokenMeter` — that a
+trim's measured saving equals the shadow price it claims and that a fresh meter replaying the trimmed log lands on the very
+same total. CI runs the suite on Node 22 and 24;
 releases go out through `.github/workflows/publish.yml`, which is manual-only (`workflow_dispatch`).
 
 ### Verification status
 
 | Check | State |
 |---|---|
-| `npm test` (30 tests: planner, args, surface apply + replay, plugin handler) | ✅ passing |
+| `npm test` (34 tests: planner, args, surface apply + log replay, plugin handler) | ✅ passing |
 | Isolated `DSH_HOME` install (`dsh plugin add file:…`) reconciling dependency **and** bundle layer | ✅ verified |
 | Composed profile tree contains the `context-trim` insert row (`dsh --dump-config`) | ✅ verified |
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
-| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 30 passing |
+| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 34 passing |
+| Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
 | CI workflow (Node 22 / 24) | ⏳ first run pending |
 | npm release via GitHub Actions | ⏳ first publish pending (Trusted Publishing cannot create a brand-new package; see the `npm-publish` procedure) |
 | End-to-end in the web GUI against a small-window model | ⏳ not yet run |
