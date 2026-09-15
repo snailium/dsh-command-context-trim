@@ -31,7 +31,11 @@ jobs:
       - name: Override the harness contracts (compat leg)
         if: matrix.harness != '0.1.2-rc.1'
         run: |
-          npm install --no-save --no-audit --no-fund \
+          # --legacy-peer-deps: the override replaces llm/session/compaction/token-meter with a
+          # later line, which npm's peer resolver refuses against the still-pinned siblings
+          # (dsh-commands@0.1.2-rc.1 -> dsh-agent -> peer dsh-llm@^0.1.2-rc.1). pnpm, which the
+          # real harness uses, has no such conflict.
+          npm install --no-save --no-audit --no-fund --legacy-peer-deps \
             @deepseek-ai/dsh-session@${{ matrix.harness }} \
             @deepseek-ai/dsh-llm@${{ matrix.harness }} \
             @deepseek-ai/dsh-compaction@${{ matrix.harness }} \
