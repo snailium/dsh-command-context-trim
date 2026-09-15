@@ -5,6 +5,29 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-15
+
+### Fixed
+
+- **DeepSeek Harness 0.1.5 compatibility.** 0.1.5 renamed the positional replacement marker
+  (`{op: 'replace', start, end}` → `{op: 'replace', startSeq, endSeq}`), so every trim failed with
+  `session event "user/message" carries an invalid replace surfaceOp`. The plugin now probes the accepted shape
+  once against the harness actually installed and writes that one, so the same build works on the 0.1.2 and
+  0.1.5 lines without a version check.
+- **The system prompt is never trimmed — and no longer eats head protection.** 0.1.5 moved the system prompt
+  from the request header onto the surface as node 0 (`system/message`). A position-only "protect the first
+  node" rule would have protected the *system prompt* and exposed the **user's original request** as the first
+  elidable message. System nodes are now barriers: never elided and never crossed, and `protectHeadNodes` counts
+  only non-barrier nodes, so it keeps protecting the task statement.
+
+### Notes
+
+- No configuration changes. The only user-visible difference is the "fixed request overhead" refusal, which now
+  says "tool schemas and other non-surface request data": on 0.1.5 the system prompt is surface content rather
+  than header content.
+- Verified on harness 0.1.2-rc.1 and 0.1.5-rc.2 (40 tests each, same build).
+
+
 ### Added
 
 - Integration tests against the **real** `ctx.tokenMeter` (bare cordis context + stub projection registry): a trim's
@@ -38,5 +61,6 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/snailium/dsh-command-context-trim/releases/tag/v0.1.0

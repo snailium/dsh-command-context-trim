@@ -4,6 +4,7 @@ import { toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-a
 import { createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm';
 import { Session } from '@deepseek-ai/dsh-session';
 import { applyTrim, createMarkerMessage, isTrimMarkerSource } from '../lib/apply.js';
+import { replaceKeys, replacementOp } from '../lib/session-compat.js';
 
 const taskMessage = (text) => createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } });
 
@@ -24,7 +25,7 @@ function buildSession(turns = 4) {
 	const session = Session.create('trim-test');
 	session.append('user/message', taskMessage('do the thing'), { surfaceOp: 'append' });
 	for (let turn = 1; turn <= turns; turn += 1) {
-		session.append('assistant/message', { turn, step: 1, message: assistantWithToolCall(`call-${turn}`) }, { surfaceOp: 'append' });
+		session.append('assistant/message', { turn, step: 1, stream: [], message: assistantWithToolCall(`call-${turn}`) }, { surfaceOp: 'append' });
 		session.append('tool/result', { turn, step: 1, message: toolResult(`call-${turn}`) }, { surfaceOp: 'append' });
 	}
 	return session;
@@ -48,7 +49,7 @@ test('appends a prune claim then a replacement shadowing the span', () => {
 	const session = buildSession();
 	const before = [...session.surface.nodes];
 	const plan = planFor(session, 1, 4, 4000);
-	const replacement = applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192));
+	const replacement = applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192), replaceKeys());
 	const claim = session.eventAt(replacement.seq - 1);
 	assert.equal(claim.type, 'compaction/prune');
 	assert.deepEqual([...claim.data.shadowedSeqs], [...plan.shadowedSeqs]);
@@ -56,7 +57,8 @@ test('appends a prune claim then a replacement shadowing the span', () => {
 	assert.equal(claim.data.shadowedTokenCount, 4000);
 	assert.equal(replacement.seq, claim.seq + 1);
 	assert.equal(replacement.type, 'user/message');
-	assert.deepEqual(replacement.surfaceOp, { op: 'replace', start: plan.startSeq, end: plan.endSeq });
+	assert.deepEqual(replacement.surfaceOp, replacementOp(replaceKeys(), plan.startSeq, plan.endSeq));
+	assert.equal(Object.keys(replacement.surfaceOp).length, 3, 'the marker must carry exactly op/start/end keys');
 	assert.deepEqual([...replacement.sourceEventSeqs].sort((a, b) => a - b), [...plan.shadowedSeqs]);
 	assert.equal(isTrimMarkerSource(replacement.data.source), true);
 	assert.match(replacement.data.content[0].text, /^\[context-trim\] 4 earlier messages/);
@@ -66,7 +68,7 @@ test('appends a prune claim then a replacement shadowing the span', () => {
 test('keeps every shadowed event in the durable log', () => {
 	const session = buildSession();
 	const plan = planFor(session, 1, 4, 4000);
-	applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192));
+	applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192), replaceKeys());
 	for (const seq of plan.shadowedSeqs) {
 		const event = session.eventAt(seq);
 		assert.ok(event !== undefined, `seq ${seq} disappeared from the log`);
@@ -78,7 +80,7 @@ test('keeps every shadowed event in the durable log', () => {
 test('a trimmed log replays into the same surface', () => {
 	const session = buildSession();
 	const plan = planFor(session, 1, 4, 4000);
-	const replacement = applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192));
+	const replacement = applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192), replaceKeys());
 	const replay = Session.create('trim-test', session.snapshotEvents(), session.header);
 	assert.deepEqual(replay.surface.nodes, session.surface.nodes);
 	const replayed = replay.eventAt(replacement.seq);
@@ -103,7 +105,7 @@ test('rejects a replacement range that is not on the current surface', () => {
 	const session = buildSession();
 	const plan = { startSeq: 1, endSeq: 999, shadowedSeqs: [1, 999], shadowedTokens: 1 };
 	assert.throws(
-		() => applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192)),
+		() => applyTrim(session, plan, createMarkerMessage(plan, 'lc:m', 8192), replaceKeys()),
 		/surface replace/
 	);
 });
@@ -114,7 +116,7 @@ test('rejects a replacement whose citations miss a shadowed node', () => {
 	assert.throws(
 		() =>
 			session.append('user/message', taskMessage('marker'), {
-				surfaceOp: { op: 'replace', start: nodes[1], end: nodes[4] },
+				surfaceOp: replacementOp(replaceKeys(), nodes[1], nodes[4]),
 				sourceEventSeqs: [nodes[1], nodes[4]]
 			}),
 		/missing/

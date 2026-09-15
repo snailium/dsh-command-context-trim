@@ -58,6 +58,20 @@ dsh plugin --profile web add file:/path/to/dsh-command-context-trim   # 从源�
 保护：开头 `protectHeadNodes`（默认 1，即任务声明）、末尾最近 `retainRatio` 窗口（下限 `minTailTokens`）、以及最后一条消息永不裁剪。
 在保护集之间采用**最旧优先、够用即止**：从最旧的平衡切点开始，只增长到刚好释放够 token。
 
+## 兼容性
+
+| Harness | 状态 |
+|---|---|
+| 0.1.2-rc.1（`latest`） | ✅ 全套测试通过 |
+| 0.1.5-rc.2（`next`） | ✅ 全套测试通过 |
+
+两处 0.1.5 变更已在不做版本号判断的前提下兼容：
+
+- **替换标记改名**：`{op:'replace', start, end}` → `{op:'replace', startSeq, endSeq}`。插件首次使用时用一个一次性游离 session 探测本机 harness 接受哪种形状，再按该形状写入。
+- **system prompt 从 header 搬到了 surface**（0.1.5 作为 `system/message` 节点 0）。system 节点被当作**屏障**：永不裁剪、任何被裁区间都不得跨越它；同时 `protectHeadNodes` 只统计非屏障节点，因此"保护头部"保护的仍是**用户的任务声明**，而不是 system prompt。
+
+因此"固定请求开销"的含义变为工具 schema + 其它非 surface 请求数据（0.1.2 上还包含 system prompt）；裁剪预算本身不受影响，因为它来自 token meter 的总量。
+
 ## 配置
 
 在 profile patch 的 `context-trim` 行上覆盖（`cordis.patch.yml` 里列出了全部默认值）：
@@ -85,7 +99,7 @@ npm run link:harness   # 也可改为从本地 dsh 安装的依赖闭包解析 @
 已验证：34 个测试全部通过（选段算法、参数解析、真实 Session 上的 surface 改写与日志重放、插件命令注册与端到端裁剪，以及用**真实 `ctx.tokenMeter`** 验证「实测降幅 == 声明的 shadow price」和「新进程重放裁剪后日志得到完全一致的总量」）；
 隔离 `DSH_HOME` 安装后 dependency 与 bundle 层均正确 reconcile；`dsh --dump-config` 中出现 `context-trim` 行；profile 启动无加载错误。
 CI 在 Node 22/24 上跑同一套测试；发布通过 `.github/workflows/publish.yml`（手动 `workflow_dispatch`）。
-npm 0.1.0 已发布（带 provenance），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
+npm 0.1.1 已发布（带 provenance），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
 
 ## License
 

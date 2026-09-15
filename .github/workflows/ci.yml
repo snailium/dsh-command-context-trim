@@ -11,19 +11,34 @@ permissions:
 
 jobs:
   test:
-    name: suite (node ${{ matrix.node }})
+    name: suite (node ${{ matrix.node }}, harness ${{ matrix.harness }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         node: ['22', '24']
+        # Both supported harness lines: 0.1.2-rc.1 is the pinned devDependency
+        # floor, 0.1.5-rc.2 renamed the positional replacement marker and moved
+        # the system prompt from the request header onto the surface.
+        harness: ['0.1.2-rc.1', '0.1.5-rc.2']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
-      - name: Install dependencies
+      - name: Install pinned dependencies
         run: npm ci
+      - name: Override the harness contracts (compat leg)
+        if: matrix.harness != '0.1.2-rc.1'
+        run: |
+          npm install --no-save --no-audit --no-fund \
+            @deepseek-ai/dsh-session@${{ matrix.harness }} \
+            @deepseek-ai/dsh-llm@${{ matrix.harness }} \
+            @deepseek-ai/dsh-compaction@${{ matrix.harness }} \
+            @deepseek-ai/dsh-token-meter@${{ matrix.harness }}
+      - name: Report the harness under test
+        run: |
+          node -e "for (const p of ['dsh-session','dsh-llm','dsh-compaction','dsh-token-meter']) console.log(p, require('@deepseek-ai/' + p + '/package.json').version)"
       - name: Run deterministic suite
         run: npm test
       - name: Syntax check

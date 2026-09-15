@@ -6,6 +6,7 @@ import { createAssistantMessage, createToolResultMessage, createUserMessage } fr
 import { Session } from '@deepseek-ai/dsh-session';
 import TokenMeter from '@deepseek-ai/dsh-token-meter';
 import { applyTrim, createMarkerMessage, provisionalMarker } from '../lib/apply.js';
+import { replaceKeys } from '../lib/session-compat.js';
 import { apply as applyPlugin } from '../lib/index.js';
 import { planTrim } from '../lib/plan.js';
 
@@ -38,6 +39,7 @@ function buildSession(pairs = 8) {
 			{
 				turn,
 				step: 1,
+				stream: [],
 				message: createAssistantMessage({
 					content: [
 						{ type: 'text', text: 'x'.repeat(4000) },
@@ -105,7 +107,7 @@ test('the planner cuts the same span the meter prices', () => {
 	});
 	assert.equal(plan.kind, 'span');
 	assert.equal(plan.startSeq, measurement.nodes[plan.startIndex].seq);
-	applyTrim(session, plan, createMarkerMessage(plan, 'x', 8000));
+	applyTrim(session, plan, createMarkerMessage(plan, 'x', 8000), replaceKeys());
 	assert.ok(meter.measure(session).totalTokens < measurement.totalTokens);
 });
 

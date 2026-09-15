@@ -78,6 +78,8 @@ Design consequences:
   original content stays in the durable session log, so a trim is auditable and recoverable by hand.
 - **No tool-call/result pair is ever split.** Cut edges are chosen with
   `toolPairingBalancedBefore`/`After` from `@deepseek-ai/dsh-compaction`.
+- **The system prompt is never trimmed** (harness 0.1.5+ carries it as a surface node): it is a barrier that no
+  elided span may touch or cross.
 - **Mutual exclusion with everything else.** The handler runs inside `agent.runMaintenance()`, which fails unless the agent
   is idle, so it cannot interleave with a turn, `/compact`, or automatic compaction; it also refuses while an unmatched
   `compaction/start` is open.
@@ -92,6 +94,26 @@ Design consequences:
 
 Within those bounds the policy is **oldest-first, least-long-possible**: the elided span starts at the oldest balanced cut
 and grows only until it frees exactly enough tokens.
+
+## Compatibility
+
+| Harness | State |
+|---|---|
+| 0.1.2-rc.1 (`latest`) | ✅ full suite green |
+| 0.1.5-rc.2 (`next`) | ✅ full suite green |
+
+Two harness changes between those lines are handled without a version check:
+
+- **The replacement marker was renamed** — `{op: 'replace', start, end}` became `{op: 'replace', startSeq, endSeq}`.
+  The plugin probes a throwaway detached session with each known shape at first use and writes the accepted one.
+- **The system prompt moved onto the surface** — 0.1.5 carries it as `system/message` node 0 instead of
+  `header.system`. System nodes are treated as **barriers**: they are never elided, no elided span crosses one,
+  and `protectHeadNodes` counts only non-barrier nodes, so head protection keeps covering the task statement
+  rather than the system prompt.
+
+Because of the second change, the fixed request overhead is now the tool schemas plus any other non-surface
+request data; on 0.1.2 it also included the system prompt. A trim's budget itself is unaffected — it comes from
+the token meter's total, whichever way the harness splits that total.
 
 ## Configuration
 
@@ -143,6 +165,7 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
 | Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 34 passing |
 | Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
+| Same suite on harness 0.1.5-rc.2 (renamed marker + surface system prompt) | ✅ 40 passing |
 | CI workflow (Node 22 / 24) | ✅ green |
 | npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |
 | Isolated profile install **from the npm registry** (dependency + bundle layer + composed insert row) | ✅ 0.1.0 |

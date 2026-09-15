@@ -1,6 +1,6 @@
 {
   "name": "dsh-command-context-trim",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Model-free /trim command for DeepSeek Harness — drop the oldest, least valuable span of conversation context so a session can continue on a smaller-window model, without any model call.",
   "license": "MIT",
   "author": "snailium",
@@ -35,14 +35,14 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-commands": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-compaction": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-invariants": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-llm": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-session": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-token-meter": "^0.1.2-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/cordis": ">=4.0.2",
+    "@deepseek-ai/dsh-commands": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-compaction": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-token-meter": ">=0.1.2-rc.1",
+    "@deepseek-ai/schemastery": ">=3.18.1"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {

@@ -95,3 +95,50 @@ test('frees exactly enough rather than dropping the whole middle', () => {
 	assert.deepEqual(plan.shadowedSeqs, [1, 2]);
 	assert.equal(plan.freedTokens, 8000);
 });
+
+test('never elides or crosses a barrier node (the 0.1.5+ system prompt)', () => {
+	const priced = [
+		{ seq: 0, heuristicTokens: 20000, barrier: true },
+		{ seq: 1, heuristicTokens: 5000 },
+		...Array.from({ length: 8 }, (_, index) => ({ seq: index + 2, heuristicTokens: 1000 }))
+	];
+	const plan = planTrim(base({ nodes: priced, budget: 12000 }));
+	// 33000 total needs 21000 freed; only 7000 sits in the elidable region.
+	assert.equal(plan.kind, 'insufficient');
+	assert.equal(plan.hasBarrier, true);
+	// Head protection counts non-barrier nodes, so the task statement (node 1) is protected.
+	assert.equal(plan.protectedHeadTokens, 25000);
+	assert.equal(plan.maxFreeable, 6900);
+});
+
+test('an elided span stops at the barrier before it', () => {
+	const priced = [
+		{ seq: 0, heuristicTokens: 1000 },
+		{ seq: 1, heuristicTokens: 1000 },
+		{ seq: 2, heuristicTokens: 1000, barrier: true },
+		{ seq: 3, heuristicTokens: 1000 },
+		{ seq: 4, heuristicTokens: 1000 },
+		{ seq: 5, heuristicTokens: 1000 },
+		{ seq: 6, heuristicTokens: 1000 }
+	];
+	const plan = planTrim(base({ nodes: priced, budget: 5500, markerCost: 0 }));
+	assert.equal(plan.kind, 'span');
+	assert.deepEqual(plan.shadowedSeqs, [3, 4]);
+	assert.ok(!plan.shadowedSeqs.includes(2), 'the span must not swallow the barrier');
+});
+
+test('reports an insufficient fit when the barrier plus head protection is the blocker', () => {
+	const priced = [
+		{ seq: 0, heuristicTokens: 500, barrier: true },
+		{ seq: 1, heuristicTokens: 5000 },
+		{ seq: 2, heuristicTokens: 1000 },
+		{ seq: 3, heuristicTokens: 1000 },
+		{ seq: 4, heuristicTokens: 1000 },
+		{ seq: 5, heuristicTokens: 1000 },
+		{ seq: 6, heuristicTokens: 1000 }
+	];
+	const plan = planTrim(base({ nodes: priced, budget: 4000, markerCost: 0 }));
+	assert.equal(plan.kind, 'insufficient');
+	assert.equal(plan.maxFreeable, 4000);
+	assert.equal(plan.protectedHeadTokens, 5500);
+});
