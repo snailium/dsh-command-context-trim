@@ -22,7 +22,7 @@ synchronous appends, zero LLM calls — it works precisely when every request is
 ## Install
 
 ```bash
-# from npm, once published
+# from npm
 dsh plugin --profile web add dsh-command-context-trim
 
 # from a checkout
@@ -143,9 +143,10 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
 | Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 34 passing |
 | Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
-| CI workflow (Node 22 / 24) | ⏳ first run pending |
-| npm release via GitHub Actions | ⏳ first publish pending (Trusted Publishing cannot create a brand-new package; see the `npm-publish` procedure) |
-| End-to-end in the web GUI against a small-window model | ⏳ not yet run |
+| CI workflow (Node 22 / 24) | ✅ green |
+| npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |
+| Isolated profile install **from the npm registry** (dependency + bundle layer + composed insert row) | ✅ 0.1.0 |
+| End-to-end in the web GUI against a small-window model | ⏳ harness ready, not yet run |
 
 ## License
 

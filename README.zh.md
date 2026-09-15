@@ -17,7 +17,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add dsh-command-context-trim          # 发布到 npm 后
+dsh plugin --profile web add dsh-command-context-trim          # 从 npm 安装
 dsh plugin --profile web add file:/path/to/dsh-command-context-trim   # 从源码
 ```
 
@@ -85,7 +85,7 @@ npm run link:harness   # 也可改为从本地 dsh 安装的依赖闭包解析 @
 已验证：34 个测试全部通过（选段算法、参数解析、真实 Session 上的 surface 改写与日志重放、插件命令注册与端到端裁剪，以及用**真实 `ctx.tokenMeter`** 验证「实测降幅 == 声明的 shadow price」和「新进程重放裁剪后日志得到完全一致的总量」）；
 隔离 `DSH_HOME` 安装后 dependency 与 bundle 层均正确 reconcile；`dsh --dump-config` 中出现 `context-trim` 行；profile 启动无加载错误。
 CI 在 Node 22/24 上跑同一套测试；发布通过 `.github/workflows/publish.yml`（手动 `workflow_dispatch`）。
-尚未执行：npm 首发（Trusted Publishing 无法创建全新包名，需要一次首发布引导）、以及 Web GUI 里的真实小窗口端到端验证。
+npm 0.1.0 已发布（带 provenance），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
 
 ## License
 
