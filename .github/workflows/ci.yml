@@ -28,18 +28,21 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Install pinned dependencies
         run: npm ci
-      - name: Override the harness contracts (compat leg)
+      - name: Build the alternate harness closure (compat leg)
         if: matrix.harness != '0.1.2-rc.1'
         run: |
-          # --legacy-peer-deps: the override replaces llm/session/compaction/token-meter with a
-          # later line, which npm's peer resolver refuses against the still-pinned siblings
-          # (dsh-commands@0.1.2-rc.1 -> dsh-agent -> peer dsh-llm@^0.1.2-rc.1). pnpm, which the
-          # real harness uses, has no such conflict.
-          npm install --no-save --no-audit --no-fund --legacy-peer-deps \
-            @deepseek-ai/dsh-session@${{ matrix.harness }} \
-            @deepseek-ai/dsh-llm@${{ matrix.harness }} \
-            @deepseek-ai/dsh-compaction@${{ matrix.harness }} \
-            @deepseek-ai/dsh-token-meter@${{ matrix.harness }}
+          # Install the whole harness release in its own directory and point this
+          # checkout at that closure. Overriding single packages in place does not
+          # work: the later line pulls peers (dsh-scope, ...) that npm's resolver
+          # refuses to add beside the still-pinned siblings.
+          mkdir -p /tmp/harness && cd /tmp/harness
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund @deepseek-ai/dsh@${{ matrix.harness }}
+      - name: Point this checkout at the alternate closure (compat leg)
+        if: matrix.harness != '0.1.2-rc.1'
+        run: |
+          rm -rf node_modules/@deepseek-ai
+          ln -s /tmp/harness/node_modules/@deepseek-ai node_modules/@deepseek-ai
       - name: Report the harness under test
         run: |
           node -e "for (const p of ['dsh-session','dsh-llm','dsh-compaction','dsh-token-meter']) console.log(p, require('@deepseek-ai/' + p + '/package.json').version)"
