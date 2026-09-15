@@ -1,0 +1,29 @@
+# dsh-command-context-trim bundle patch.
+#
+# Install into a profile:
+#   dsh plugin --profile <profile> add dsh-command-context-trim
+#
+# The insert activates the plugin; the config block below is the full default
+# set, shown so overrides are a copy/paste away. Remove `config` entirely to use
+# the built-in defaults (`lib/config.js`).
+- insert:
+    - id: context-trim
+      name: dsh-command-context-trim
+      config:
+        # Fraction of the usable window a trim aims for: budget =
+        # floor((contextWindow - reserveOutputTokens) * targetRatio).
+        targetRatio: 0.9
+        # Output tokens kept available for the model's own reply.
+        reserveOutputTokens: 8192
+        # Recent tail kept verbatim, as a fraction of the model's context window.
+        retainRatio: 0.16
+        # Absolute floor for that retained tail.
+        minTailTokens: 2048
+        # Leading surface nodes never trimmed (the task statement).
+        protectHeadNodes: 1
+        # Allow the elided span to reach into the retained tail when the oldest
+        # span alone cannot free enough tokens.
+        allowTailTrim: true
+        # Slack added to the priced replacement marker, so the post-trim request
+        # stays under budget even though the marker text carries real numbers.
+        markerSlackTokens: 64
