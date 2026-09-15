@@ -122,12 +122,14 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 ## Development
 
 ```bash
-npm run link:harness   # symlink node_modules/@deepseek-ai to a local dsh installation's closure
+npm install            # the harness contracts this plugin builds on, pinned as devDependencies
 npm test               # node --test
+npm run link:harness   # or resolve @deepseek-ai from a local dsh installation instead of npm
 ```
 
 Tests cover the pure planner and argument parser, the surface mutation against a real `Session` (including log replay),
-and the plugin's command registration and end-to-end trim over a stub context.
+and the plugin's command registration and end-to-end trim over a stub context. CI runs the suite on Node 22 and 24;
+releases go out through `.github/workflows/publish.yml`, which is manual-only (`workflow_dispatch`).
 
 ### Verification status
 
@@ -137,6 +139,9 @@ and the plugin's command registration and end-to-end trim over a stub context.
 | Isolated `DSH_HOME` install (`dsh plugin add file:…`) reconciling dependency **and** bundle layer | ✅ verified |
 | Composed profile tree contains the `context-trim` insert row (`dsh --dump-config`) | ✅ verified |
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
+| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 30 passing |
+| CI workflow (Node 22 / 24) | ⏳ first run pending |
+| npm release via GitHub Actions | ⏳ first publish pending (Trusted Publishing cannot create a brand-new package; see the `npm-publish` procedure) |
 | End-to-end in the web GUI against a small-window model | ⏳ not yet run |
 
 ## License

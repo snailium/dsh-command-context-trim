@@ -1,8 +1,9 @@
 {
   "name": "dsh-command-context-trim",
   "version": "0.1.0",
-  "description": "Model-free /trim command for DeepSeek Harness \u2014 drop the oldest, least valuable span of conversation context so a session can continue on a smaller-window model, without any model call.",
+  "description": "Model-free /trim command for DeepSeek Harness — drop the oldest, least valuable span of conversation context so a session can continue on a smaller-window model, without any model call.",
   "license": "MIT",
+  "author": "snailium",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -17,6 +18,7 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -24,7 +26,8 @@
   },
   "scripts": {
     "test": "node --test",
-    "link:harness": "bash scripts/dev-link-harness.sh"
+    "link:harness": "bash scripts/dev-link-harness.sh",
+    "prepublishOnly": "npm test"
   },
   "dsh": {
     "bundle": {
@@ -42,9 +45,36 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-commands": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-compaction": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-invariants": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-token-meter": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
     }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-compaction": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.1.2-rc.1",
+    "@deepseek-ai/schemastery": "3.18.2"
   },
   "keywords": [
     "dsh",
@@ -59,5 +89,12 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/snailium/dsh-command-context-trim.git"
+  },
+  "homepage": "https://github.com/snailium/dsh-command-context-trim#readme",
+  "bugs": {
+    "url": "https://github.com/snailium/dsh-command-context-trim/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

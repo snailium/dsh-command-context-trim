@@ -1,0 +1,120 @@
+name: Publish to npm
+
+# Canonical publish workflow — copy to .github/workflows/publish.yml
+# (see the `npm-publish` skill for the full procedure, one-time npm setup, and the
+# post-publish verification checklist).
+#
+# Manual-only: nothing publishes as a side effect of a normal push or release.
+#
+# Auth: npm Trusted Publishing (OIDC) is the preferred path and needs no secret —
+# configure this repository + this workflow filename as a trusted publisher on the
+# npm package settings page, and GitHub mints a short-lived OIDC token per run
+# (`id-token: write` below). A repository secret `NPM_TOKEN` is still honoured as
+# a fallback for environments where trusted publishing is not set up.
+#
+#   npm page → package → Settings → Trusted Publisher → GitHub Actions
+#     Organization or user : <owner>
+#     Repository           : <repo>
+#     Workflow filename    : publish.yml      <- filename only, must match exactly
+#     Environment          : (leave empty)
+#     Allowed actions      : must include "npm publish"
+#
+# Gotcha: a trusted publisher connection created after 2026-09-03 defaults to
+# allowing only `npm stage publish`. Direct `npm publish` must be selected
+# explicitly in the connection's "Allowed actions", or the registry answers
+# `403 ... OIDC permission denied for this action`. Connections cannot be edited
+# — delete and recreate. Run this workflow with `debug-oidc` to print the OIDC
+# claims npm matches against.
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Pack and verify only — do not publish'
+        type: boolean
+        default: false
+      debug-oidc:
+        description: 'Print the OIDC token claims npm matches against (no publish)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: npm publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # Trusted Publishing (OIDC) requires npm >= 11.5.1 (and Node >= 22.14.0).
+      # The npm bundled with Node 22 is older, so upgrade the CLI explicitly
+      # rather than relying on whatever the runner happens to ship.
+      - name: Ensure an npm CLI that supports Trusted Publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # npm versions are immutable: never let a red run look like a release.
+      - name: Refuse to republish an existing version
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "::error::${NAME}@${VERSION} is already on npm — bump the version first."
+            exit 1
+          fi
+          echo "About to publish ${NAME}@${VERSION}"
+
+      - name: Configure npm auth
+        run: |
+          set -euo pipefail
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> "$HOME/.npmrc"
+            echo "Auth: NPM_TOKEN secret"
+          else
+            echo "Auth: npm Trusted Publishing (OIDC) — no token present"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Diagnose a "403 OIDC permission denied" by showing the claims npm matches
+      # the package's Trusted Publisher entry against.
+      - name: Debug OIDC claims
+        if: ${{ inputs.debug-oidc }}
+        run: |
+          set -euo pipefail
+          echo "github.repository  = ${{ github.repository }}"
+          echo "github.workflow_ref= ${{ github.workflow_ref }}"
+          echo "github.event_name  = ${{ github.event_name }}"
+          echo "github.ref         = ${{ github.ref }}"
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::No OIDC request URL — is 'id-token: write' set on the job?"
+            exit 1
+          fi
+          TOKEN=$(curl -sS \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" | jq -r .value)
+          echo "--- OIDC claims (audience=npm:registry.npmjs.org) ---"
+          node -e 'const p=process.argv[1].split(".")[1];console.log(JSON.stringify(JSON.parse(Buffer.from(p,"base64url").toString()),null,2))' "$TOKEN"
+
+      # The only line that proves success: `+ <package>@<version>`.
+      - name: Publish
+        if: ${{ !inputs.dry-run }}
+        run: npm publish --access public --provenance
+
+      - name: Dry run
+        if: ${{ inputs.dry-run }}
+        run: npm publish --dry-run --access public

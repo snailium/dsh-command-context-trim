@@ -77,13 +77,15 @@ dsh plugin --profile web add file:/path/to/dsh-command-context-trim   # 从源�
 ## 开发与验证
 
 ```bash
-npm run link:harness   # 把 node_modules/@deepseek-ai 链到本地 dsh 安装的依赖闭包
+npm install            # 本插件依赖的 harness 契约已固定为 devDependencies
 npm test               # node --test
+npm run link:harness   # 也可改为从本地 dsh 安装的依赖闭包解析 @deepseek-ai
 ```
 
 已验证：30 个测试全部通过（选段算法、参数解析、真实 Session 上的 surface 改写与日志重放、插件命令注册与端到端裁剪）；
 隔离 `DSH_HOME` 安装后 dependency 与 bundle 层均正确 reconcile；`dsh --dump-config` 中出现 `context-trim` 行；profile 启动无加载错误。
-尚未执行：在 Web GUI 里对真实小窗口模型做端到端验证（下一步）。
+CI 在 Node 22/24 上跑同一套测试；发布通过 `.github/workflows/publish.yml`（手动 `workflow_dispatch`）。
+尚未执行：npm 首发（Trusted Publishing 无法创建全新包名，需要一次首发布引导）、以及 Web GUI 里的真实小窗口端到端验证。
 
 ## License
 
