@@ -56,9 +56,21 @@ jobs:
       - name: Point this checkout at the alternate closure (compat leg)
         if: matrix.harness != '0.1.2-rc.1'
         run: |
-          rm -rf node_modules/@deepseek-ai
-          ln -s "$(cat /tmp/harness/closure-path)" node_modules/@deepseek-ai
-          ls node_modules/@deepseek-ai | head -8
+          # Link the closure in package by package. Replacing the whole
+          # node_modules/@deepseek-ai scope directory would also delete this repo's own
+          # devDependencies (schemastery, cordis), which the plugin imports directly -
+          # that is how the first attempt at this failed with
+          # "Cannot find package '@deepseek-ai/schemastery'".
+          closure=$(cat /tmp/harness/closure-path)
+          linked=0
+          for dir in "$closure"/*; do
+            name=$(basename "$dir")
+            rm -rf "node_modules/@deepseek-ai/$name"
+            ln -s "$dir" "node_modules/@deepseek-ai/$name"
+            linked=$((linked + 1))
+          done
+          echo "linked $linked packages from $closure"
+          ls node_modules/@deepseek-ai | wc -l
       - name: Report the harness under test
         run: |
           node -e "for (const p of ['dsh-session','dsh-llm','dsh-compaction','dsh-token-meter']) console.log(p, require('@deepseek-ai/' + p + '/package.json').version)"
