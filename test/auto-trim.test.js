@@ -73,11 +73,13 @@ const stubAgent = (session) => ({
 function captureContext(config) {
 	const listeners = new Map();
 	const logs = [];
+	const logRecords = [];
+	const record = (level) => (message) => {
+		logs.push(String(message));
+		logRecords.push({ level, message: String(message) });
+	};
 	const ctx = {
-		logger: {
-			info: (message) => logs.push(String(message)),
-			warn: (message) => logs.push(String(message))
-		},
+		logger: { info: record('info'), warn: record('warn') },
 		on(name, listener, options) {
 			const entries = listeners.get(name) ?? [];
 			entries.push({ listener, options });
@@ -92,6 +94,7 @@ function captureContext(config) {
 	return {
 		ctx,
 		logs,
+		logRecords,
 		listener: (name) => listeners.get(name)?.[0],
 		entries: (name) => listeners.get(name) ?? []
 	};
@@ -341,4 +344,17 @@ test('a repeat overflow says the declared contextWindow does not match the backe
 		true,
 		'the second attempt must point at the misdeclared window'
 	);
+});
+
+test('every automatic-trim decision is logged at warn, so it survives the default log level', async () => {
+	const { listener, logRecords } = captureContext({ maxAutoTrimRetries: 1 });
+	const session = buildSession();
+	const agent = stubAgent(session);
+	const next = () => undefined;
+	const overflowCall = () => listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, next);
+	await overflowCall();
+	await overflowCall();
+	const decisions = logRecords.filter((entry) => entry.message.includes('context-overflow auto-trim'));
+	assert.ok(decisions.length >= 2, `expected a line per decision, saw ${decisions.length}`);
+	assert.deepEqual([...new Set(decisions.map((entry) => entry.level))], ['warn']);
 });

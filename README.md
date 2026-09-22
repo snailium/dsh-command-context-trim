@@ -178,7 +178,7 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 | Key | Default | Meaning |
 |---|---|---|
 | `targetRatio` | `0.9` | `budget = floor((contextWindow - reserveOutputTokens) * targetRatio)` |
-| `reserveOutputTokens` | `8192` | Output space kept for the model's own reply |
+| `reserveOutputTokens` | `8192` | Output space kept for the model's own reply. Keep it plus the provider's own `maxTokens` inside the real window: a 32k server with `maxTokens: 16384` exhausts the window with prompt + output even when every prompt fits |
 | `retainRatio` / `retainTokens` | `0.16` / — | Recent tail kept verbatim (mutually exclusive forms) |
 | `minTailTokens` | `2048` | Absolute floor for that tail |
 | `protectHeadNodes` | `1` | Leading nodes that are never trimmed |
@@ -199,6 +199,27 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
   `assistant`/`tool` events, which are only legal inside an open turn.
 - **Heuristic pricing.** Budgets use the token meter's own estimate — the same numbers `/compact` and the GUI context bar
   use. Provider-reported usage drifts slightly from it.
+
+## Reading the session log
+
+`compaction/prune` has **two producers**, and only one of them is this plugin:
+
+| Producer | Where | Followed by | Shape |
+|---|---|---|---|
+| **this plugin** (`/trim`, automatic) | inside a step, right after a failed attempt | `user/message` whose `source.plugin` is `dsh-command-context-trim` | a whole span, both cut edges tool-pairing balanced |
+| **DSH's tool-result pruner** | in compaction's own path | `tool/result` replacing exactly one node | a single `tool/result`, its `tool/call` kept |
+
+Position is the other tell: a prune **between `step/end` and `step/start`** belongs to compaction's *pressure*
+path (and this plugin, being overflow-only, is deliberately not involved); a prune **inside a step, after an
+`assistant/attempt`** is an overflow recovery. A session with no `assistant/attempt` events never hit
+`CONTEXT_WINDOW_EXCEEDED` at all, so this plugin never ran in it.
+
+Two accounting traps when checking whether a trim helped: `assistant/message` `usage` is **per request**
+(`input + cacheRead + output` for that call), not a session total — and a tool result is appended *after* the
+request that produced its tool call, so comparing consecutive `usage.total` values measures "content was added",
+not "the trim freed nothing". Compare the rejected attempt with the retry instead. Also, an in-place replacement of
+the *last* node keeps the cached prefix (so `cacheRead` stays high); only a mid-conversation cut — this plugin, or
+compaction rewriting the head — breaks it, which shows up as `cacheRead` dropping and `input` jumping on the next call.
 
 ## Development
 

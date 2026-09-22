@@ -20,6 +20,12 @@ All notable changes to this project are documented here. This project adheres to
     actually serves, fix it in `settings.yaml` (and the server's own context flag).
 - Defaults changed accordingly: `maxAutoTrimRetries` **1 → 3**, and a new `autoTrimShrink` (**0.5**).
 
+- **Automatic-trim decisions now log at `warn`.** An unattended rewrite of the user's context has to be visible in the
+  host log: a test run recorded the trim in the session log while the app log showed nothing, because `info` is filtered
+  at the default level.
+- The README now explains how to tell this plugin's `compaction/prune` from DSH's tool-result pruner in a session log
+  (producer of the following event, and pre-step vs in-step position) and the two `usage` accounting traps.
+
 ### Notes
 
 - The honest fix for a mismatched backend is still the setting itself: with `contextWindow: 32768` the very first trim
