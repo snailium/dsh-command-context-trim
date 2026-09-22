@@ -5,6 +5,30 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-22
+
+### Fixed
+
+- **A wall hit is no longer a one-shot.** Reported from a 32k backend while `settings.yaml` declared `contextWindow:
+  90000`: the first automatic trim targeted `(90000 - 8192) * 0.9 ~= 73.6k`, the retry was rejected again, and with
+  `maxAutoTrimRetries: 1` spent the recovery fell through to compaction — whose summarisation request is itself over the
+  real limit, so the turn died. The plugin now adapts instead of trusting a declaration it has just seen contradicted:
+  - the **first** attempt still trusts the declared window (cheap, and correct when the window is honest);
+  - every **later** attempt inside the same episode retargets to `failingRequestTokens * (1 - autoTrimShrink)`, i.e. it
+    halves the request that was just rejected — a geometric descent that converges however wrong the declared window is;
+  - a repeat attempt also logs an actionable warning: the routed model's `contextWindow` is larger than the backend
+    actually serves, fix it in `settings.yaml` (and the server's own context flag).
+- Defaults changed accordingly: `maxAutoTrimRetries` **1 → 3**, and a new `autoTrimShrink` (**0.5**).
+
+### Notes
+
+- The honest fix for a mismatched backend is still the setting itself: with `contextWindow: 32768` the very first trim
+  targets ~22k and succeeds without the adaptive path. The adaptive path exists so a wrong declaration degrades into
+  "more trimming than necessary" rather than a dead turn.
+- Nothing else changed: the event, its gating (`CONTEXT_WINDOW_EXCEEDED` only), the elision preference tiers and the
+  newest-user-message barrier are untouched.
+
+
 ## [0.2.0] - 2026-09-16
 
 ### Added
@@ -101,7 +125,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/snailium/dsh-command-context-trim/releases/tag/v0.1.0

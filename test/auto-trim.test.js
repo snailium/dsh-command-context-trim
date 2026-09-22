@@ -307,3 +307,38 @@ test('it never touches ordinary compaction: no pre-step/pressure hook is registe
 	const source = entries('agent/request-error')[0].listener.toString();
 	assert.match(source, /CONTEXT_WINDOW_EXCEEDED/);
 });
+
+test('a repeat overflow retargets to a fraction of the request that just failed', async () => {
+	const { listener } = captureContext({ maxAutoTrimRetries: 3, autoTrimShrink: 0.5 });
+	const session = buildSession();
+	const agent = stubAgent(session);
+	const next = () => undefined;
+	const overflowCall = () => listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, next);
+
+	assert.deepEqual(await overflowCall(), { kind: 'retry' }, 'the first attempt trusts the declared window');
+	const afterFirst = stubMeter().measure(session).totalTokens;
+	// Simulate the retry being rejected again: the declared window lied.
+	const action = await overflowCall();
+	assert.deepEqual(action, { kind: 'retry' });
+	const afterSecond = stubMeter().measure(session).totalTokens;
+	assert.ok(
+		afterSecond <= Math.floor(afterFirst * 0.5) + 64,
+		`the repeat attempt must halve the failing request (${afterFirst} -> ${afterSecond})`
+	);
+});
+
+test('a repeat overflow says the declared contextWindow does not match the backend', async () => {
+	const { listener, logs } = captureContext({ maxAutoTrimRetries: 3, autoTrimShrink: 0.5 });
+	const session = buildSession();
+	const agent = stubAgent(session);
+	const next = () => undefined;
+	const overflowCall = () => listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, next);
+	await overflowCall();
+	logs.length = 0;
+	await overflowCall();
+	assert.equal(
+		logs.some((line) => line.includes('contextWindow is larger than the backend actually serves')),
+		true,
+		'the second attempt must point at the misdeclared window'
+	);
+});

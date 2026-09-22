@@ -110,8 +110,15 @@ Scope, deliberately narrow:
 | ordinary threshold compaction (`agent/pre-step` pressure) | **never touched** |
 | `/compact`, the tool-result pruner | **never touched** |
 
-The per-episode retry budget (`maxAutoTrimRetries`, default 1) resets when a completed assistant message lands or the
+The per-episode retry budget (`maxAutoTrimRetries`, default 3) resets when a completed assistant message lands or the
 agent goes idle, mirroring compaction's own overflow accounting. Set `autoTrim: false` to keep trimming manual.
+
+**A wrong `contextWindow` degrades into extra trimming, not a dead turn.** The first attempt trusts the declared window.
+If the retry is rejected again, the declaration has just been contradicted, so every later attempt in that episode
+retargets to `failingRequestTokens * (1 - autoTrimShrink)` — by default *halving* the request that was rejected — which
+converges however far the backend is below its declaration, and logs a warning naming the setting to fix. With an honest
+window the first attempt succeeds and the adaptive path never runs. The real fix for a mismatched backend is the setting:
+`contextWindow: 32768` makes the first trim target ~22k and fit.
 
 Trade-off, stated plainly: an automatic trim **drops** the oldest span instead of summarizing it. On a small local
 window that is the point — the summarizer must fit the region it is condensing and frequently cannot — but the dropped
@@ -178,7 +185,8 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 | `allowTailTrim` | `true` | Enable tiers 2–3 (reach into the retained tail; as a last resort include the final message). `false` ends the search after tier 1, making the retained tail a hard boundary |
 | `markerSlackTokens` | `64` | Slack added to the priced marker so the post-trim request stays under budget |
 | `autoTrim` | `true` | Trim automatically on `CONTEXT_WINDOW_EXCEEDED`; never fires on ordinary compaction |
-| `maxAutoTrimRetries` | `1` | Automatic trims allowed per overflow episode before compaction takes over |
+| `maxAutoTrimRetries` | `3` | Automatic trims allowed per overflow episode before compaction takes over |
+| `autoTrimShrink` | `0.5` | After a repeat overflow, retarget to this fraction of the rejected request (geometric descent when the declared window is wrong) |
 
 ## Limits
 

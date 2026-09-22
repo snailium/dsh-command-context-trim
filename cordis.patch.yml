@@ -32,4 +32,10 @@
         # Ordinary threshold compaction is never touched.
         autoTrim: true
         # Automatic trims allowed per overflow episode before compaction takes over.
-        maxAutoTrimRetries: 1
+        # More than one is needed when the declared contextWindow is larger than the
+        # backend really serves: see autoTrimShrink below.
+        maxAutoTrimRetries: 3
+        # After a repeat overflow the target becomes this fraction of the request that
+        # was just rejected (0.5 = halve it), which converges even when the declared
+        # window is wrong. The first attempt still trusts the declared window.
+        autoTrimShrink: 0.5

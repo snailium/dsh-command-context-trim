@@ -1,6 +1,6 @@
 {
   "name": "dsh-command-context-trim",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Model-free /trim for DeepSeek Harness — drop the oldest, least valuable span of context on demand (the `/trim` command) or automatically when a request hits the model's context wall, without any model call.",
   "license": "MIT",
   "author": "snailium",

@@ -72,7 +72,9 @@ agent-preset 的 isolate realm 里挂载的（web profile 里就是这样），�
 **范围刻意收窄**：只有 `CONTEXT_WINDOW_EXCEEDED` 才触发；其它请求错误、普通阈值 compaction（`agent/pre-step` 压力路径）、
 `/compact`、工具结果 pruner **一律不碰**（有测试锁定注册的监听器集合）。
 
-每轮溢出 epis 的额度由 `maxAutoTrimRetries`（默认 1）限制，收到完成的 assistant 消息或 agent 空闲即重置。
+每轮溢出 episode 的额度由 `maxAutoTrimRetries`（默认 3）限制，收到完成的 assistant 消息或 agent 空闲即重置。
+
+**声明窗口与实际不符时，退化成"多裁一点"而不是"回合死掉"**：第一次仍按声明的 `contextWindow` 定目标；若重试又被拒（说明声明已被事实推翻），此后同一 episode 内改为按 `failingRequestTokens × (1 − autoTrimShrink)` 重定目标——默认**减半**刚被拒的那次请求，几何收敛，并打印告警指出该去改 `settings.yaml` 的哪个设置。窗口声明正确时第一次就成功，自适应路径根本不会触发。根治办法仍是配置本身：`contextWindow: 32768` 时首次裁剪目标约 22k，直接命中。
 代价如实说：自动 trim 是**丢弃**最旧一段而不是摘要它——在小窗口下这正是要点，但被丢的内容只会变成一条占位标记。
 `/compact` 仍在，原文也仍在会话日志里。
 
