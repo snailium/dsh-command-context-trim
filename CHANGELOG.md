@@ -5,6 +5,32 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-22
+
+### Added
+
+- **Cheap reduction first: oversized tool results are slimmed in place before any span is elided.** On the wall the
+  plugin now performs the same head/marker/tail transform DSH's own pruner performs — keeping the node, its tool call and
+  the prefix up to it — and only elides a whole span when that is not enough. It delegates to the official
+  `toolResultPruner` service when that service is reachable from the plugin's context (0.1.2; a 0.1.5 headless profile
+  where compaction stays on the host plane) and performs the identical transform itself when it is not (a 0.1.5 web
+  profile hides the pruner inside an agent-preset isolate realm). New configuration: `preferInPlacePrune` (default true)
+  and `pruneThresholdChars` / `pruneHeadChars` / `pruneTailChars` (8192 / 4096 / 1024, mirroring DSH's defaults).
+- The in-place marker is `[... tool result middle trimmed to fit the context window ...]`, deliberately distinct from
+  DSH's `[... tool result middle pruned ...]`, so a session log shows which producer slimmed a node.
+
+### Notes
+
+- Verified end to end in the real `dsh-container` image (0.1.5-rc.2, isolated home, mock backend): a request of 23,429
+  tokens was refused, the plugin delegated to the official pruner, the retry came back at 19,995 tokens, the turn
+  completed, and the session log shows **no `compaction/start`** and **no span elided** — the pruner's `tool/result`
+  replacement kept `callId` and the step. The earlier span path was verified the same way (33,373 → 18,431 tokens).
+  The inline fallback (used only where the service is unreachable, i.e. a 0.1.5 web profile) is unit-tested against the
+  same semantics but not yet exercised end to end.
+- `scripts/mock-overflow-server.mjs` gained `TOOL_COMMAND` / `TOOL_DESCRIPTION`: a bash tool call without a `description`
+  fails argument validation, which silently produced tiny error results instead of real tool output during testing.
+
+
 ## [0.2.1] - 2026-09-22
 
 ### Fixed
@@ -131,7 +157,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.0...v0.1.1

@@ -7,6 +7,8 @@
  * the real limit is hit — the "context wall" without needing a model switch.
  *
  *   request 1..N : assistant text + tool-call(bash)   → the turn continues
+ *                  (TOOL_COMMAND picks what the tool runs; use `seq 1 40000` for a
+ *                   single oversized tool result, which exercises in-place slimming)
  *   request >L   : 400 with llama.cpp-style overflow wording
  *   after trim   : the request fits again → final text, turn completes
  *
@@ -18,6 +20,13 @@ const PORT = Number(process.env.PORT ?? 4185);
 const TOKEN_LIMIT = Number(process.env.TOKEN_LIMIT ?? 12000);
 const TOOL_STEPS = Number(process.env.TOOL_STEPS ?? 4);
 const FILLER_CHARS = Number(process.env.FILLER_CHARS ?? 48000);
+// Command the mock asks the agent's bash tool to run. Point it at something with a
+// large output (e.g. `seq 1 40000`) to produce a single oversized TOOL RESULT
+// instead of a large assistant message.
+const TOOL_COMMAND = process.env.TOOL_COMMAND ?? 'echo filler';
+// The harness bash tool requires a `description`; a call without one fails argument
+// validation and returns a tiny error result instead of any output.
+const TOOL_DESCRIPTION = process.env.TOOL_DESCRIPTION ?? 'run a command';
 
 
 function estimateTokens(body) {
@@ -98,7 +107,7 @@ const server = createServer((req, res) => {
 						{
 							id: `call-${served}`,
 							type: 'function',
-							function: { name: 'bash', arguments: JSON.stringify({ command: 'echo filler' }) }
+							function: { name: 'bash', arguments: JSON.stringify({ command: TOOL_COMMAND, description: TOOL_DESCRIPTION }) }
 						}
 					]
 				}
@@ -127,7 +136,7 @@ const server = createServer((req, res) => {
 					choices: [
 						{
 							index: 0,
-							delta: { tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ command: 'echo filler' }) } }] },
+							delta: { tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ command: TOOL_COMMAND, description: TOOL_DESCRIPTION }) } }] },
 							finish_reason: null
 						}
 					]

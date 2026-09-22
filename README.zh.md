@@ -74,6 +74,14 @@ agent-preset 的 isolate realm 里挂载的（web profile 里就是这样），�
 
 每轮溢出 episode 的额度由 `maxAutoTrimRetries`（默认 3）限制，收到完成的 assistant 消息或 agent 空闲即重置。
 
+**便宜的那一步先做**：撞墙时先把超长 tool result **原地瘦身**（head + 标记 + tail，与 DSH 自带 pruner 同一变换），不够才整段裁剪：
+
+```
+请求被拒 → tool result 原地瘦身 → 整段裁剪一段 → compaction（prune + summarize）
+```
+
+官方 `toolResultPruner` 服务在插件上下文里可见时（0.1.2、以及 compaction 仍在宿主层的 0.1.5 headless）直接委托它；不可见时（0.1.5 web profile 把 pruner 藏在 agent-preset isolate realm 里）自己做同样的变换。瘦身保留节点、tool call 与其之前的前缀；写入的标记是 `[... tool result middle trimmed to fit the context window ...]`，与 DSH 自己的 `[... tool result middle pruned ...]` 可区分。`preferInPlacePrune: false` 可跳过这一步。
+
 **声明窗口与实际不符时，退化成"多裁一点"而不是"回合死掉"**：第一次仍按声明的 `contextWindow` 定目标；若重试又被拒（说明声明已被事实推翻），此后同一 episode 内改为按 `failingRequestTokens × (1 − autoTrimShrink)` 重定目标——默认**减半**刚被拒的那次请求，几何收敛，并打印告警指出该去改 `settings.yaml` 的哪个设置。窗口声明正确时第一次就成功，自适应路径根本不会触发。根治办法仍是配置本身：`contextWindow: 32768` 时首次裁剪目标约 22k，直接命中。
 代价如实说：自动 trim 是**丢弃**最旧一段而不是摘要它——在小窗口下这正是要点，但被丢的内容只会变成一条占位标记。
 `/compact` 仍在，原文也仍在会话日志里。
@@ -130,7 +138,7 @@ npm run link:harness   # 也可改为从本地 dsh 安装的依赖闭包解析 @
 已验证：34 个测试全部通过（选段算法、参数解析、真实 Session 上的 surface 改写与日志重放、插件命令注册与端到端裁剪，以及用**真实 `ctx.tokenMeter`** 验证「实测降幅 == 声明的 shadow price」和「新进程重放裁剪后日志得到完全一致的总量」）；
 隔离 `DSH_HOME` 安装后 dependency 与 bundle 层均正确 reconcile；`dsh --dump-config` 中出现 `context-trim` 行；profile 启动无加载错误。
 CI 在 Node 22/24 × harness 0.1.2-rc.1/`next`（当前解析到 0.1.5-rc.3）四腿矩阵上跑同一套 61 项测试；发布通过 `.github/workflows/publish.yml`（手动 `workflow_dispatch`）。
-npm 0.2.0（新增撞墙自动 trim），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
+npm 0.2.2（撞墙自动 trim：先原地瘦身、再整段裁剪、最后才摘要），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
 
 ## License
 

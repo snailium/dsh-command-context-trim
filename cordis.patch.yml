@@ -39,3 +39,13 @@
         # was just rejected (0.5 = halve it), which converges even when the declared
         # window is wrong. The first attempt still trusts the declared window.
         autoTrimShrink: 0.5
+        # Before eliding any span, slim oversized tool results IN PLACE (head +
+        # marker + tail), the same cheap reduction DSH's own pruner performs. Uses
+        # the official `toolResultPruner` service when it is reachable and performs
+        # the same transform itself when it is not (a 0.1.5 web profile hides it in
+        # an agent-preset isolate realm). A span is elided only when that is not
+        # enough.
+        preferInPlacePrune: true
+        pruneThresholdChars: 8192
+        pruneHeadChars: 4096
+        pruneTailChars: 1024

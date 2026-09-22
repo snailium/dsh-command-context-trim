@@ -113,6 +113,20 @@ Scope, deliberately narrow:
 The per-episode retry budget (`maxAutoTrimRetries`, default 3) resets when a completed assistant message lands or the
 agent goes idle, mirroring compaction's own overflow accounting. Set `autoTrim: false` to keep trimming manual.
 
+**The cheap reduction runs first.** On the wall the plugin slims oversized tool results **in place** (head + marker + tail,
+the same transform DSH's own pruner performs) and only elides a whole span when that is not enough:
+
+```
+request refused → in-place tool-result slim  →  elide one span  →  compaction (prune + summarize)
+```
+
+It calls the official `toolResultPruner` service when that service is reachable from the plugin's context (0.1.2, and a
+0.1.5 headless profile where compaction stays on the host plane) and performs the same transform itself when it is not (a
+0.1.5 web profile hides the pruner inside an agent-preset isolate realm). A slim keeps the node, its tool call and the
+prefix up to it — the marker written in place says `[... tool result middle trimmed to fit the context window ...]`, which
+is how a log shows that *this* plugin slimmed a node rather than DSH's pruner (`[... tool result middle pruned ...]`).
+Set `preferInPlacePrune: false` to go straight to span elision.
+
 **A wrong `contextWindow` degrades into extra trimming, not a dead turn.** The first attempt trusts the declared window.
 If the retry is rejected again, the declaration has just been contradicted, so every later attempt in that episode
 retargets to `failingRequestTokens * (1 - autoTrimShrink)` — by default *halving* the request that was rejected — which
@@ -187,6 +201,8 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 | `autoTrim` | `true` | Trim automatically on `CONTEXT_WINDOW_EXCEEDED`; never fires on ordinary compaction |
 | `maxAutoTrimRetries` | `3` | Automatic trims allowed per overflow episode before compaction takes over |
 | `autoTrimShrink` | `0.5` | After a repeat overflow, retarget to this fraction of the rejected request (geometric descent when the declared window is wrong) |
+| `preferInPlacePrune` | `true` | Slim oversized tool results in place before planning any span; uses the official pruner when reachable |
+| `pruneThresholdChars` / `pruneHeadChars` / `pruneTailChars` | `8192` / `4096` / `1024` | In-place slim budgets, mirroring DSH's own pruner defaults |
 
 ## Limits
 
@@ -206,7 +222,8 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 
 | Producer | Where | Followed by | Shape |
 |---|---|---|---|
-| **this plugin** (`/trim`, automatic) | inside a step, right after a failed attempt | `user/message` whose `source.plugin` is `dsh-command-context-trim` | a whole span, both cut edges tool-pairing balanced |
+| **this plugin**, span elision | inside a step, right after a failed attempt | `user/message` whose `source.plugin` is `dsh-command-context-trim` | a whole span, both cut edges tool-pairing balanced |
+| **this plugin**, in-place slim | same place, before any span is planned | `tool/result` replacing exactly one node | one `tool/result`, marker `[... tool result middle trimmed to fit the context window ...]`, `callId` kept |
 | **DSH's tool-result pruner** | in compaction's own path | `tool/result` replacing exactly one node | a single `tool/result`, its `tool/call` kept |
 
 Position is the other tell: a prune **between `step/end` and `step/start`** belongs to compaction's *pressure*
@@ -256,14 +273,15 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 
 | Check | State |
 |---|---|
-| `npm test` (61 tests: planner, args, surface apply + log replay, plugin handler, automatic overflow path, config) | ✅ passing |
+| `npm test` (72 tests: planner, args, surface apply + log replay, plugin handler, automatic overflow path, in-place slim, config) | ✅ passing |
 | Isolated `DSH_HOME` install (`dsh plugin add file:…`) reconciling dependency **and** bundle layer | ✅ verified |
 | Composed profile tree contains the `context-trim` insert row (`dsh --dump-config`) | ✅ verified |
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
-| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 61 passing |
+| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 72 passing |
 | Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
 | Real-`cordis` proof that a `prepend`ed waterfall listener runs first and vetoes the chain (the mechanism the automatic path depends on) | ✅ 3 tests |
-| Same suite on the newer harness line (renamed replacement marker + surface system prompt); CI resolves it via the `next` tag, currently 0.1.5-rc.3 | ✅ 61 passing |
+| Same suite on the newer harness line (renamed replacement marker + surface system prompt); CI resolves it via the `next` tag, currently 0.1.5-rc.3 | ✅ 72 passing |
+| **End-to-end in the real `dsh-container` image (0.1.5-rc.2, isolated home, mock backend)**: span path (33,373 → 18,431 tokens, `compaction/start` = 0) and in-place slim path (23,429 → 19,995 tokens, no span elided, pruner delegated to the official service) | ✅ both verified |
 | CI workflow (Node 22 / 24) | ✅ green |
 | npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |
 | Isolated profile install **from the npm registry** (dependency + bundle layer + composed insert row) | ✅ 0.1.0 |

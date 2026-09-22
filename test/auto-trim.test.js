@@ -358,3 +358,97 @@ test('every automatic-trim decision is logged at warn, so it survives the defaul
 	assert.ok(decisions.length >= 2, `expected a line per decision, saw ${decisions.length}`);
 	assert.deepEqual([...new Set(decisions.map((entry) => entry.level))], ['warn']);
 });
+
+/** One open turn whose tool result alone exceeds the in-place prune threshold. */
+function buildHugeToolResultSession() {
+	const session = Session.create('auto-trim-prune');
+	session.append('user/message', taskMessage('read the big file'), { surfaceOp: 'append' });
+	session.append('turn/start', { turn: 1 });
+	session.append('step/start', { turn: 1, step: 1 });
+	session.append(
+		'assistant/message',
+		{
+			turn: 1,
+			step: 1,
+			stream: [],
+			message: createAssistantMessage({
+				content: [{ type: 'tool-call', id: 'call-big', name: 'bash', arguments: '{}' }],
+				source: { provider: 'mock', model: 'mock-1' }
+			})
+		},
+		{ surfaceOp: 'append' }
+	);
+	session.append(
+		'tool/result',
+		{
+			turn: 1,
+			step: 1,
+			message: createToolResultMessage({ callId: 'call-big', content: [{ type: 'text', text: 'z'.repeat(40_000) }], isError: false })
+		},
+		{ surfaceOp: 'append' }
+	);
+	return session;
+}
+
+/** Whether any surface replacement on this session is a user/message (a span elision). */
+function hasUserMessageReplacement(session) {
+	for (let seq = 0; seq < session.seq; seq += 1) {
+		const event = session.eventAt(seq);
+		if (event?.type === 'user/message' && typeof event.surfaceOp === 'object') return true;
+	}
+	return false;
+}
+
+test('slims one oversized tool result in place and retries without eliding any span', async () => {
+	const { listener, logs } = captureContext({ maxAutoTrimRetries: 3 });
+	const session = buildHugeToolResultSession();
+	const agent = stubAgent(session);
+	const generation = session.surface.replaceGeneration;
+	const action = await listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, () => undefined);
+	assert.deepEqual(action, { kind: 'retry' });
+	assert.ok(session.surface.replaceGeneration > generation, 'the surface must change');
+	const claim = session.eventAt(session.seq - 2);
+	const replacement = session.eventAt(session.seq - 1);
+	assert.equal(claim.type, 'compaction/prune');
+	assert.equal(replacement.type, 'tool/result');
+	assert.equal(replacement.data.message.source.callId, 'call-big', 'the tool call keeps its result');
+	assert.equal(hasUserMessageReplacement(session), false, 'no span may be elided when slimming in place is enough');
+	assert.equal(logs.some((line) => line.includes('in place')), true, 'the decision must say it slimmed in place');
+	assert.equal(logs.some((line) => line.includes('context-overflow auto-trim')), true);
+});
+
+test('falls back to a span elision only when slimming in place is not enough', async () => {
+	const { listener } = captureContext({ maxAutoTrimRetries: 3 });
+	// Big assistant text (not a tool result) plus one oversized tool result: the
+	// in-place slim cannot reach the budget on its own, so a span must follow.
+	const session = buildSession(10);
+	session.append('turn/start', { turn: 99 });
+	session.append('step/start', { turn: 99, step: 1 });
+	session.append(
+		'assistant/message',
+		{
+			turn: 99,
+			step: 1,
+			stream: [],
+			message: createAssistantMessage({
+				content: [
+					{ type: 'text', text: 'q'.repeat(60_000) },
+					{ type: 'tool-call', id: 'call-late', name: 'bash', arguments: '{}' }
+				],
+				source: { provider: 'mock', model: 'mock-1' }
+			})
+		},
+		{ surfaceOp: 'append' }
+	);
+	session.append(
+		'tool/result',
+		{ turn: 99, step: 1, message: createToolResultMessage({ callId: 'call-late', content: [{ type: 'text', text: 'w'.repeat(40_000) }], isError: false }) },
+		{ surfaceOp: 'append' }
+	);
+	session.append('step/end', { turn: 99, step: 1 });
+	session.append('turn/end', { turn: 99, reason: 'completed' });
+	const agent = stubAgent(session);
+	const action = await listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, () => undefined);
+	assert.deepEqual(action, { kind: 'retry' });
+	assert.equal(hasUserMessageReplacement(session), true, 'the span fallback must run');
+});
