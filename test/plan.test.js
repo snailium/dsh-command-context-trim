@@ -56,6 +56,21 @@ test('never elides the protected task statement', () => {
 	assert.equal(plan.endSeq, 6);
 });
 
+test('keeps the final node whenever an older span can free enough', () => {
+	const priced = [
+		{ seq: 0, heuristicTokens: 1000 },
+		{ seq: 1, heuristicTokens: 1000, userMessage: true },
+		{ seq: 2, heuristicTokens: 1000 },
+		{ seq: 3, heuristicTokens: 1000 },
+		{ seq: 4, heuristicTokens: 1000 }
+	];
+	const plan = planTrim(base({ nodes: priced, budget: 4000, markerCost: 0 }));
+	assert.equal(plan.kind, 'span');
+	assert.equal(plan.endIndex, 2);
+	assert.equal(plan.reachedFinalNode, false, 'the final node must not be touched when an older span suffices');
+	assert.ok(!plan.shadowedSeqs.includes(4));
+});
+
 test('never elides the newest user message, and never spans across it', () => {
 	const priced = [
 		{ seq: 0, heuristicTokens: 1000 },
@@ -87,8 +102,21 @@ test('elides a tool-call/result pair that ends the surface (the shape that deadl
 	);
 	assert.equal(plan.kind, 'span');
 	assert.deepEqual(plan.shadowedSeqs, [2, 3]);
+	assert.equal(plan.reachedFinalNode, true, 'this shape has no other feasible span');
 	assert.ok(!plan.shadowedSeqs.includes(0), 'the system prompt is never touched');
 	assert.ok(!plan.shadowedSeqs.includes(1), 'the live instruction is never touched');
+});
+
+test('with allowTailTrim false the retained tail is a hard boundary (no final-node tier)', () => {
+	const priced = [
+		{ seq: 0, heuristicTokens: 1100, barrier: true },
+		{ seq: 1, heuristicTokens: 100, userMessage: true },
+		{ seq: 2, heuristicTokens: 1100 },
+		{ seq: 3, heuristicTokens: 20 }
+	];
+	const plan = planTrim(base({ nodes: priced, budget: 1500, markerCost: 0, retainTokens: 1200, minTailTokens: 1200, allowTailTrim: false }));
+	assert.equal(plan.kind, 'insufficient');
+	assert.equal(plan.maxFreeable, 0, 'the tail boundary protects the whole tool-call/result pair');
 });
 
 test('relaxes the retained tail before giving up', () => {

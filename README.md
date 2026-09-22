@@ -125,14 +125,24 @@ durable session log.
 | Leading `protectHeadNodes` nodes (default 1) | The task statement — dropping it destroys the point of the conversation. |
 | Recent tail (`retainRatio` of the window, floor `minTailTokens`) | Recency is what a coding agent needs; retention is relaxed only when the fit is otherwise impossible, and the result says so. |
 | The **newest** `user/message` | The live human instruction. It is never elided and no span may cross it, so an ongoing request cannot be dropped. Older user messages are ordinary nodes. |
+| The final surface message | **A preference, not a prohibition.** Kept whenever any older span can free enough; dropped only as a last resort, and typically only together with its tool call (they can only be removed as a pair). |
 
 Within those bounds the policy is **oldest-first, least-long-possible**: the elided span starts at the oldest balanced cut
 and grows only until it frees exactly enough tokens.
 
-The last node of the surface is *not* protected by position. Protecting it outright deadlocks the most common overflow
-shape: one large assistant tool-call whose tool result is the final node cannot be removed as a pair, leaving a handful of
-freeable tokens while the request stays over the wall. The newest user message is the real anchor, and it is a barrier
-instead.
+Elision always starts at the **oldest** balanced cut, and the search is graded so that the cheapest loss is tried first:
+
+1. a span that stays **outside the retained tail** and keeps the **final message** (the configured retention, relaxed step
+   by step only if the fit otherwise fails);
+2. a span that may reach **into the retained tail**, still keeping the final message;
+3. **last resort** — a span that includes the final message, typically the current step's assistant tool-call plus its tool
+   result, which can only be removed as a pair.
+
+Protecting the final message outright deadlocks the most common overflow shape: one large assistant tool-call whose tool
+result is the last node cannot be removed as a pair, which left a handful of freeable tokens while the request stayed over
+the wall (observed live: "largest balanced span frees ~4 of the ~4631 tokens needed"). The newest user message is the real
+anchor and stays a hard barrier in every tier. With `allowTailTrim: false` the search ends after tier 1, so the retained
+tail is a hard boundary and the final message is never dropped.
 
 ## Compatibility
 
@@ -165,7 +175,7 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 | `retainRatio` / `retainTokens` | `0.16` / — | Recent tail kept verbatim (mutually exclusive forms) |
 | `minTailTokens` | `2048` | Absolute floor for that tail |
 | `protectHeadNodes` | `1` | Leading nodes that are never trimmed |
-| `allowTailTrim` | `true` | Let the elided span reach into the retained tail when necessary |
+| `allowTailTrim` | `true` | Enable tiers 2–3 (reach into the retained tail; as a last resort include the final message). `false` ends the search after tier 1, making the retained tail a hard boundary |
 | `markerSlackTokens` | `64` | Slack added to the priced marker so the post-trim request stays under budget |
 | `autoTrim` | `true` | Trim automatically on `CONTEXT_WINDOW_EXCEEDED`; never fires on ordinary compaction |
 | `maxAutoTrimRetries` | `1` | Automatic trims allowed per overflow episode before compaction takes over |

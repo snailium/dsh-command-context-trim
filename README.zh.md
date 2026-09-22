@@ -78,7 +78,13 @@ agent-preset 的 isolate realm 里挂载的（web profile 里就是这样），�
 
 ## 保护集与选段策略
 
-保护：开头 `protectHeadNodes`（默认 1，即任务声明）、末尾最近 `retainRatio` 窗口（下限 `minTailTokens`）、以及**最新的那条 `user/message`（你当前的指令）永不裁剪、也不被跨越**。注意最后一条节点本身**不**按位置保护——否则最常见的溢出形态会被卡死（一条很大的 assistant tool-call，它的 tool-result 恰好是最后一条，两者只能成对移除）。
+保护与**优先级**（永远从最旧处开始裁，按"损失最小"逐档尝试）：
+
+1. 留在保留尾部之外，且**保留最后一条**（先按配置的保留量；实在放不下才逐级放宽保留量）；
+2. 可以进入保留尾部，但仍**保留最后一条**；
+3. **最后一档**才允许把最后一条纳入——通常就是当前这步的 assistant tool-call 与它的 tool-result（两者只能成对移除）。
+
+另外：开头 `protectHeadNodes`（默认 1，即任务声明）与**最新的那条 `user/message`（你当前的指令）是硬屏障**——永不裁剪、也不被跨越。把最后一条按位置硬保护会卡死最常见的溢出形态（实测探针：`largest balanced span frees ~4 of the ~4631 tokens needed`）。`allowTailTrim: false` 时搜索在第 1 档后结束：保留尾部成为硬边界，最后一条永不丢弃。
 在保护集之间采用**最旧优先、够用即止**：从最旧的平衡切点开始，只增长到刚好释放够 token。
 
 ## 兼容性

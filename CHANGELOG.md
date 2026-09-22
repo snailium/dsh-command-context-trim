@@ -15,6 +15,12 @@ All notable changes to this project are documented here. This project adheres to
   is repaired by *dropping* the oldest span first and only pays for summarization when dropping cannot help.
   This is the unattended form of `/trim`; it is the same execution, invoked by the harness instead of a human.
 - Configuration `autoTrim` (default `true`) and `maxAutoTrimRetries` (default `1`, per overflow episode).
+- **The elided span is chosen by explicit preference tiers.** Elision always starts at the oldest balanced cut, and the
+  search is graded: (1) stay outside the retained tail and keep the final message, with the configured retention relaxed
+  step by step only if the fit otherwise fails; (2) reach into the retained tail, still keeping the final message;
+  (3) last resort — include the final message, typically the current step's assistant tool-call plus its tool result,
+  which can only be removed as a pair. `allowTailTrim: false` ends the list after tier 1. The plan and every rendered
+  result state when the last-resort tier was used.
 - **Planner anchor changed: the newest `user/message` is protected, the final node is not.** The previous rule
   ("never elide the final surface node") deadlocked the most common overflow shape — one large assistant tool-call whose
   tool result is the last node could not be removed as a pair, so only a handful of tokens were freeable while the
