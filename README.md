@@ -256,14 +256,14 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 
 | Check | State |
 |---|---|
-| `npm test` (51 tests: planner, args, surface apply + log replay, plugin handler, automatic overflow path) | ✅ passing |
+| `npm test` (61 tests: planner, args, surface apply + log replay, plugin handler, automatic overflow path, config) | ✅ passing |
 | Isolated `DSH_HOME` install (`dsh plugin add file:…`) reconciling dependency **and** bundle layer | ✅ verified |
 | Composed profile tree contains the `context-trim` insert row (`dsh --dump-config`) | ✅ verified |
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
-| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 51 passing |
+| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 61 passing |
 | Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
 | Real-`cordis` proof that a `prepend`ed waterfall listener runs first and vetoes the chain (the mechanism the automatic path depends on) | ✅ 3 tests |
-| Same suite on harness 0.1.5-rc.2 (renamed marker + surface system prompt) | ✅ 51 passing |
+| Same suite on the newer harness line (renamed replacement marker + surface system prompt); CI resolves it via the `next` tag, currently 0.1.5-rc.3 | ✅ 61 passing |
 | CI workflow (Node 22 / 24) | ✅ green |
 | npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |
 | Isolated profile install **from the npm registry** (dependency + bundle layer + composed insert row) | ✅ 0.1.0 |

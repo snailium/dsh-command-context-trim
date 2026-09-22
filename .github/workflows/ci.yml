@@ -18,9 +18,11 @@ jobs:
       matrix:
         node: ['22', '24']
         # Both supported harness lines: 0.1.2-rc.1 is the pinned devDependency
-        # floor, 0.1.5-rc.2 renamed the positional replacement marker and moved
-        # the system prompt from the request header onto the surface.
-        harness: ['0.1.2-rc.1', '0.1.5-rc.2']
+        # floor; `next` tracks the newer line (0.1.5+ renamed the positional
+        # replacement marker and moved the system prompt onto the surface). The
+        # 'Report the harness under test' step prints the exact closure versions
+        # resolved, so a leg never claims more than it tested.
+        harness: ['0.1.2-rc.1', 'next']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
