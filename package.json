@@ -27,7 +27,8 @@
   "scripts": {
     "test": "node --test",
     "link:harness": "bash scripts/dev-link-harness.sh",
-    "prepublishOnly": "npm test"
+    "prepublishOnly": "npm test",
+    "e2e:mock": "node scripts/mock-overflow-server.mjs"
   },
   "dsh": {
     "bundle": {

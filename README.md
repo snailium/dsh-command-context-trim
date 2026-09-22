@@ -124,10 +124,15 @@ durable session log.
 |---|---|
 | Leading `protectHeadNodes` nodes (default 1) | The task statement — dropping it destroys the point of the conversation. |
 | Recent tail (`retainRatio` of the window, floor `minTailTokens`) | Recency is what a coding agent needs; retention is relaxed only when the fit is otherwise impossible, and the result says so. |
-| The final surface node | Never elided, even when trimming into the tail. |
+| The **newest** `user/message` | The live human instruction. It is never elided and no span may cross it, so an ongoing request cannot be dropped. Older user messages are ordinary nodes. |
 
 Within those bounds the policy is **oldest-first, least-long-possible**: the elided span starts at the oldest balanced cut
 and grows only until it frees exactly enough tokens.
+
+The last node of the surface is *not* protected by position. Protecting it outright deadlocks the most common overflow
+shape: one large assistant tool-call whose tool result is the final node cannot be removed as a pair, leaving a handful of
+freeable tokens while the request stays over the wall. The newest user message is the real anchor, and it is a barrier
+instead.
 
 ## Compatibility
 
@@ -178,6 +183,23 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
   use. Provider-reported usage drifts slightly from it.
 
 ## Development
+
+### End-to-end overflow check (no model needed)
+
+`scripts/mock-overflow-server.mjs` is a stateful OpenAI-compatible endpoint that enforces a **real** limit lower than the
+`contextWindow` the harness is told, and answers the first `TOOL_STEPS` requests with a tool call so one turn keeps
+looping and grows past the real limit — the context wall, without a model switch:
+
+```bash
+node scripts/mock-overflow-server.mjs &            # PORT=4185 TOKEN_LIMIT=12000 TOOL_STEPS=4
+# point an ISOLATED profile at it (provider with contextWindow 20000, baseURL .../v1), then:
+DSH_HOME=$(mktemp -d) dsh --profile headless "..."   # see the isolated-home procedure in dsh-plugin-packaging
+```
+
+A passing run leaves this in the session log: `assistant/attempt` (the wall), then exactly one `compaction/prune` + one
+`user/message` replacement, then a **succeeding** retry — and **zero** `compaction/start`, proving the request was
+repaired by trimming and that summarisation never ran.
+
 
 ```bash
 npm install            # the harness contracts this plugin builds on, pinned as devDependencies

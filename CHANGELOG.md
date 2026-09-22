@@ -15,6 +15,12 @@ All notable changes to this project are documented here. This project adheres to
   is repaired by *dropping* the oldest span first and only pays for summarization when dropping cannot help.
   This is the unattended form of `/trim`; it is the same execution, invoked by the harness instead of a human.
 - Configuration `autoTrim` (default `true`) and `maxAutoTrimRetries` (default `1`, per overflow episode).
+- **Planner anchor changed: the newest `user/message` is protected, the final node is not.** The previous rule
+  ("never elide the final surface node") deadlocked the most common overflow shape — one large assistant tool-call whose
+  tool result is the last node could not be removed as a pair, so only a handful of tokens were freeable while the
+  request stayed over the wall (observed live: "largest balanced span frees ~4 of the ~4631 tokens needed"). The newest
+  human instruction is now a **barrier** (never elided, never crossed) and everything after it stays eligible, tool
+  pairing still enforced on both cut edges.
 
 ### Notes
 

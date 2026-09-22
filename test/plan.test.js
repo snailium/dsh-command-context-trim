@@ -56,10 +56,39 @@ test('never elides the protected task statement', () => {
 	assert.equal(plan.endSeq, 6);
 });
 
-test('never elides the final surface node', () => {
-	const plan = planTrim(base({ nodes: nodes(1000, 1000, 1000, 1000), budget: 1000, markerCost: 0 }));
+test('never elides the newest user message, and never spans across it', () => {
+	const priced = [
+		{ seq: 0, heuristicTokens: 1000 },
+		{ seq: 1, heuristicTokens: 1000 },
+		{ seq: 2, heuristicTokens: 1000, userMessage: true },
+		{ seq: 3, heuristicTokens: 1000 }
+	];
+	const plan = planTrim(base({ nodes: priced, budget: 1000, markerCost: 0 }));
 	assert.equal(plan.kind, 'insufficient');
-	assert.equal(plan.maxFreeable, 2000);
+	assert.equal(plan.protectedUserTokens, 1000);
+	assert.equal(plan.maxFreeable, 1000, 'the regions on either side are one node each');
+});
+
+test('elides a tool-call/result pair that ends the surface (the shape that deadlocked overflow)', () => {
+	const priced = [
+		{ seq: 0, heuristicTokens: 1100, barrier: true },
+		{ seq: 1, heuristicTokens: 100, userMessage: true },
+		{ seq: 2, heuristicTokens: 1100 },
+		{ seq: 3, heuristicTokens: 20 }
+	];
+	const plan = planTrim(
+		base({
+			nodes: priced,
+			budget: 1500,
+			markerCost: 0,
+			// Only the tool result closes the pair; the tool-call node must not end a span.
+			isBalancedAfter: (seq) => seq !== 2
+		})
+	);
+	assert.equal(plan.kind, 'span');
+	assert.deepEqual(plan.shadowedSeqs, [2, 3]);
+	assert.ok(!plan.shadowedSeqs.includes(0), 'the system prompt is never touched');
+	assert.ok(!plan.shadowedSeqs.includes(1), 'the live instruction is never touched');
 });
 
 test('relaxes the retained tail before giving up', () => {
@@ -108,7 +137,7 @@ test('never elides or crosses a barrier node (the 0.1.5+ system prompt)', () => 
 	assert.equal(plan.hasBarrier, true);
 	// Head protection counts non-barrier nodes, so the task statement (node 1) is protected.
 	assert.equal(plan.protectedHeadTokens, 25000);
-	assert.equal(plan.maxFreeable, 6900);
+	assert.equal(plan.maxFreeable, 7900);
 });
 
 test('an elided span stops at the barrier before it', () => {
@@ -139,6 +168,6 @@ test('reports an insufficient fit when the barrier plus head protection is the b
 	];
 	const plan = planTrim(base({ nodes: priced, budget: 4000, markerCost: 0 }));
 	assert.equal(plan.kind, 'insufficient');
-	assert.equal(plan.maxFreeable, 4000);
+	assert.equal(plan.maxFreeable, 5000);
 	assert.equal(plan.protectedHeadTokens, 5500);
 });

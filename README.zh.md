@@ -78,7 +78,7 @@ agent-preset 的 isolate realm 里挂载的（web profile 里就是这样），�
 
 ## 保护集与选段策略
 
-保护：开头 `protectHeadNodes`（默认 1，即任务声明）、末尾最近 `retainRatio` 窗口（下限 `minTailTokens`）、以及最后一条消息永不裁剪。
+保护：开头 `protectHeadNodes`（默认 1，即任务声明）、末尾最近 `retainRatio` 窗口（下限 `minTailTokens`）、以及**最新的那条 `user/message`（你当前的指令）永不裁剪、也不被跨越**。注意最后一条节点本身**不**按位置保护——否则最常见的溢出形态会被卡死（一条很大的 assistant tool-call，它的 tool-result 恰好是最后一条，两者只能成对移除）。
 在保护集之间采用**最旧优先、够用即止**：从最旧的平衡切点开始，只增长到刚好释放够 token。
 
 ## 兼容性
