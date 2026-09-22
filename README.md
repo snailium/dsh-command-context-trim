@@ -84,6 +84,40 @@ Design consequences:
   is idle, so it cannot interleave with a turn, `/compact`, or automatic compaction; it also refuses while an unmatched
   `compaction/start` is open.
 
+## Automatic trimming on the context wall
+
+`autoTrim` (default on) makes the same model-free reduction happen without anyone typing a command: a **prepended**
+`agent/request-error` listener reacts to `CONTEXT_WINDOW_EXCEEDED`, trims, and asks the loop to retry.
+
+```
+request fails (context wall)
+  ├─ prepended: context-trim   → trim a span, no model call → retry      ← wins when it can free space
+  └─ next(): compaction-basic  → prune tool results → summarize (LLM)    ← only when trimming cannot help
+```
+
+Why `prepend` is the whole trick: `agent/request-error` is a Cordis **waterfall**, and compaction registers its own
+summarization recovery on the same event. Cordis keeps listeners in registration order and `{ prepend: true }`
+unshifts to the front, so this plugin runs first even though compaction is mounted later — in a web profile it lives
+inside an agent-preset isolate realm, which no host-plane plugin can out-order by mount position. Returning
+`{ kind: 'retry' }` without calling `next()` vetoes summarization for that attempt.
+
+Scope, deliberately narrow:
+
+| Event | Behaviour |
+|---|---|
+| `CONTEXT_WINDOW_EXCEEDED` on `agent/request-error` | trim, then retry |
+| any other request failure | untouched (`next()`) |
+| ordinary threshold compaction (`agent/pre-step` pressure) | **never touched** |
+| `/compact`, the tool-result pruner | **never touched** |
+
+The per-episode retry budget (`maxAutoTrimRetries`, default 1) resets when a completed assistant message lands or the
+agent goes idle, mirroring compaction's own overflow accounting. Set `autoTrim: false` to keep trimming manual.
+
+Trade-off, stated plainly: an automatic trim **drops** the oldest span instead of summarizing it. On a small local
+window that is the point — the summarizer must fit the region it is condensing and frequently cannot — but the dropped
+text is replaced by a marker rather than a summary. `/compact` stays available, and the full text remains in the
+durable session log.
+
 ## What is protected
 
 | Protected | Why |
@@ -128,6 +162,8 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 | `protectHeadNodes` | `1` | Leading nodes that are never trimmed |
 | `allowTailTrim` | `true` | Let the elided span reach into the retained tail when necessary |
 | `markerSlackTokens` | `64` | Slack added to the priced marker so the post-trim request stays under budget |
+| `autoTrim` | `true` | Trim automatically on `CONTEXT_WINDOW_EXCEEDED`; never fires on ordinary compaction |
+| `maxAutoTrimRetries` | `1` | Automatic trims allowed per overflow episode before compaction takes over |
 
 ## Limits
 
@@ -159,13 +195,14 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 
 | Check | State |
 |---|---|
-| `npm test` (34 tests: planner, args, surface apply + log replay, plugin handler) | ✅ passing |
+| `npm test` (51 tests: planner, args, surface apply + log replay, plugin handler, automatic overflow path) | ✅ passing |
 | Isolated `DSH_HOME` install (`dsh plugin add file:…`) reconciling dependency **and** bundle layer | ✅ verified |
 | Composed profile tree contains the `context-trim` insert row (`dsh --dump-config`) | ✅ verified |
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
-| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 34 passing |
+| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 51 passing |
 | Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
-| Same suite on harness 0.1.5-rc.2 (renamed marker + surface system prompt) | ✅ 40 passing |
+| Real-`cordis` proof that a `prepend`ed waterfall listener runs first and vetoes the chain (the mechanism the automatic path depends on) | ✅ 3 tests |
+| Same suite on harness 0.1.5-rc.2 (renamed marker + surface system prompt) | ✅ 51 passing |
 | CI workflow (Node 22 / 24) | ✅ green |
 | npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |
 | Isolated profile install **from the npm registry** (dependency + bundle layer + composed insert row) | ✅ 0.1.0 |

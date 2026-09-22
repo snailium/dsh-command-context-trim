@@ -5,6 +5,34 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-16
+
+### Added
+
+- **Automatic trimming on the context wall.** A `prepend`ed `agent/request-error` listener reacts to
+  `CONTEXT_WINDOW_EXCEEDED`, frees space with no model call, and asks the loop to retry. Only when it cannot free
+  anything does the waterfall continue into DSH's own recovery (prune + summarize) — so a session that hits the wall
+  is repaired by *dropping* the oldest span first and only pays for summarization when dropping cannot help.
+  This is the unattended form of `/trim`; it is the same execution, invoked by the harness instead of a human.
+- Configuration `autoTrim` (default `true`) and `maxAutoTrimRetries` (default `1`, per overflow episode).
+
+### Notes
+
+- **Scope: the context wall only.** The listener fires exclusively for `CONTEXT_WINDOW_EXCEEDED`. Ordinary
+  threshold compaction (`agent/pre-step` pressure), `/compact`, and the tool-result pruner are untouched — this is
+  asserted by a test that pins the registered listener set.
+- Why `prepend` is required: `agent/request-error` is a Cordis waterfall and compaction registers its summarization
+  recovery on the same event. Cordis stores listeners in registration order and `{ prepend: true }` unshifts, so this
+  listener runs first even when compaction is mounted later inside an agent-preset isolate realm (as it is in a web
+  profile). Returning `{ kind: 'retry' }` without calling `next()` vetoes summarization for that attempt.
+- The per-episode budget resets when a completed assistant message lands or the agent goes idle, mirroring
+  compaction's own overflow accounting.
+- Trade-off, stated plainly: an automatic trim **drops** the oldest span rather than summarizing it. That is the
+  point on a small local window — the summarizer must fit the region it is condensing and frequently cannot — but it
+  does mean the dropped text is replaced by a marker instead of a summary. `/compact` remains available, and the full
+  text stays in the durable session log.
+
+
 ## [0.1.1] - 2026-09-15
 
 ### Fixed
@@ -61,6 +89,7 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/snailium/dsh-command-context-trim/releases/tag/v0.1.0

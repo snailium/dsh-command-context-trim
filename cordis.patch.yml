@@ -27,3 +27,9 @@
         # Slack added to the priced replacement marker, so the post-trim request
         # stays under budget even though the marker text carries real numbers.
         markerSlackTokens: 64
+        # Trim automatically when a request hits the model's context wall
+        # (CONTEXT_WINDOW_EXCEEDED) instead of going straight to compaction.
+        # Ordinary threshold compaction is never touched.
+        autoTrim: true
+        # Automatic trims allowed per overflow episode before compaction takes over.
+        maxAutoTrimRetries: 1

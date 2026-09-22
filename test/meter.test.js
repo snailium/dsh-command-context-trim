@@ -76,7 +76,9 @@ function trimHandlerFor(meter) {
 			},
 			commands: { register: (definition) => (commands.set(definition.name, definition), () => undefined) },
 			tokenMeter: meter,
-			get: () => undefined
+			get: () => undefined,
+			on: () => () => undefined,
+			logger: { info: () => undefined, warn: () => undefined }
 		},
 		{}
 	);

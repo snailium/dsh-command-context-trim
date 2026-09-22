@@ -53,6 +53,29 @@ dsh plugin --profile web add file:/path/to/dsh-command-context-trim   # 从源�
 - **与其它机制互斥**：命令在 `agent.runMaintenance()` 内执行（非 idle 直接失败），不会与回合、`/compact`、自动压缩交错；
   存在未闭合的 `compaction/start` 时也会拒绝执行。
 
+## 撞墙自动 trim
+
+`autoTrim`（默认开）让同一套"无模型调用"的裁剪在无人值守时发生：用 **`prepend`** 注册的 `agent/request-error`
+监听器在 `CONTEXT_WINDOW_EXCEEDED` 时裁剪并请求重试。
+
+```
+请求撞墙
+  ├─ prepend: context-trim   → 裁剪一段，零模型调用 → retry       ← 能腾出空间时由它解决
+  └─ next(): compaction-basic → 先 prune 工具结果再摘要（LLM）     ← 只在 trim 无能为力时
+```
+
+为什么 `prepend` 是关键：`agent/request-error` 是 Cordis 的 **waterfall**，compaction 也在同一事件上注册了自己的
+摘要恢复；Cordis 按注册顺序存放监听器，`{ prepend: true }` 会 `unshift` 到最前，所以即使 compaction 是稍后在
+agent-preset 的 isolate realm 里挂载的（web profile 里就是这样），本插件依然先执行。不调用 `next()` 即否决该次
+摘要。
+
+**范围刻意收窄**：只有 `CONTEXT_WINDOW_EXCEEDED` 才触发；其它请求错误、普通阈值 compaction（`agent/pre-step` 压力路径）、
+`/compact`、工具结果 pruner **一律不碰**（有测试锁定注册的监听器集合）。
+
+每轮溢出 epis 的额度由 `maxAutoTrimRetries`（默认 1）限制，收到完成的 assistant 消息或 agent 空闲即重置。
+代价如实说：自动 trim 是**丢弃**最旧一段而不是摘要它——在小窗口下这正是要点，但被丢的内容只会变成一条占位标记。
+`/compact` 仍在，原文也仍在会话日志里。
+
 ## 保护集与选段策略
 
 保护：开头 `protectHeadNodes`（默认 1，即任务声明）、末尾最近 `retainRatio` 窗口（下限 `minTailTokens`）、以及最后一条消息永不裁剪。
@@ -99,7 +122,7 @@ npm run link:harness   # 也可改为从本地 dsh 安装的依赖闭包解析 @
 已验证：34 个测试全部通过（选段算法、参数解析、真实 Session 上的 surface 改写与日志重放、插件命令注册与端到端裁剪，以及用**真实 `ctx.tokenMeter`** 验证「实测降幅 == 声明的 shadow price」和「新进程重放裁剪后日志得到完全一致的总量」）；
 隔离 `DSH_HOME` 安装后 dependency 与 bundle 层均正确 reconcile；`dsh --dump-config` 中出现 `context-trim` 行；profile 启动无加载错误。
 CI 在 Node 22/24 上跑同一套测试；发布通过 `.github/workflows/publish.yml`（手动 `workflow_dispatch`）。
-npm 0.1.1 已发布（带 provenance），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
+npm 0.2.0（新增撞墙自动 trim），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
 
 ## License
 

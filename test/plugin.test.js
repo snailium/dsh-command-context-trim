@@ -26,6 +26,7 @@ function stubMeter() {
 /** Cordis-shaped context capturing the registrations this plugin makes. */
 function stubContext(overrides = {}) {
 	const commands = new Map();
+	const listeners = new Map();
 	const ctx = {
 		effect(generator) {
 			const iterator = generator();
@@ -40,11 +41,20 @@ function stubContext(overrides = {}) {
 			}
 		},
 		get: () => undefined,
+		// registerAutoTrim wires listeners through ctx.on; record them so a test can
+		// assert what the plugin subscribes to.
+		on(name, listener, options) {
+			const entries = listeners.get(name) ?? [];
+			entries.push({ listener, options });
+			listeners.set(name, entries);
+			return () => undefined;
+		},
+		logger: { info: () => undefined, warn: () => undefined },
 		tokenMeter: stubMeter(),
 		...overrides
 	};
 	applyPlugin(ctx, {});
-	return { ctx, commands };
+	return { ctx, commands, listeners };
 }
 
 const taskMessage = (text) => createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } });
