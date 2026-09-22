@@ -31,34 +31,33 @@ jobs:
       - name: Build the alternate harness closure (compat leg)
         if: matrix.harness != '0.1.2-rc.1'
         run: |
-          # Install the harness release in its own project and point this checkout at
-          # that closure. Two traps, both hit for real:
-          #   - overriding single packages in place fails with ERESOLVE, because the
-          #     later line pulls peers (dsh-scope, ...) npm refuses to add beside the
-          #     still-pinned siblings;
-          #   - installing only the CLI is not enough: npm may hoist its dependency
-          #     closure under the CLI instead of to the top level, so the symlinked
-          #     scope directory then has no dsh-session at all.
-          # The four contracts are therefore installed as DIRECT dependencies of the
-          # scratch project, which pins the exact versions under test and guarantees
-          # they land in the top-level scope directory.
+          # Install the harness CLI at the pinned version in its own project and let
+          # its own dependency ranges choose the closure, then point this checkout at
+          # wherever that closure landed. Three traps, all hit for real:
+          #   - overriding single packages inside this repo fails with ERESOLVE, because
+          #     the later line pulls peers (dsh-scope, ...) npm refuses to add beside
+          #     the still-pinned siblings;
+          #   - installing the four contracts explicitly next to the CLI fails as soon
+          #     as upstream publishes a newer sibling (0.1.5-rc.3 needs dsh-llm
+          #     ^0.1.5-rc.3 while the pin says rc.2);
+          #   - assuming the closure is hoisted to node_modules/@deepseek-ai is not
+          #     safe either: npm nests it under the CLI when the tree needs two copies.
+          # So: install only the CLI, then locate the directory that actually contains
+          # dsh-session and symlink THAT. The next step prints the versions found, so
+          # the leg always reports what it really tested.
           mkdir -p /tmp/harness && cd /tmp/harness
           npm init -y >/dev/null
-          npm install --no-audit --no-fund \
-            @deepseek-ai/dsh@${{ matrix.harness }} \
-            @deepseek-ai/dsh-session@${{ matrix.harness }} \
-            @deepseek-ai/dsh-llm@${{ matrix.harness }} \
-            @deepseek-ai/dsh-compaction@${{ matrix.harness }} \
-            @deepseek-ai/dsh-token-meter@${{ matrix.harness }}
-          for p in dsh-session dsh-llm dsh-compaction dsh-token-meter; do
-            test -f "node_modules/@deepseek-ai/$p/package.json" || {
-              echo "::error::$p is missing from the scratch closure"; ls node_modules/@deepseek-ai; exit 1; }
-          done
+          npm install --no-audit --no-fund @deepseek-ai/dsh@${{ matrix.harness }}
+          closure=$(dirname "$(find /tmp/harness/node_modules -maxdepth 7 -type d -name dsh-session -print -quit)")
+          test -n "$closure" && test -f "$closure/dsh-session/package.json" || {
+            echo "::error::no closure containing dsh-session under /tmp/harness"; find /tmp/harness/node_modules -maxdepth 3 -type d | head -20; exit 1; }
+          echo "closure: $closure"
+          echo "$closure" > /tmp/harness/closure-path
       - name: Point this checkout at the alternate closure (compat leg)
         if: matrix.harness != '0.1.2-rc.1'
         run: |
           rm -rf node_modules/@deepseek-ai
-          ln -s /tmp/harness/node_modules/@deepseek-ai node_modules/@deepseek-ai
+          ln -s "$(cat /tmp/harness/closure-path)" node_modules/@deepseek-ai
           ls node_modules/@deepseek-ai | head -8
       - name: Report the harness under test
         run: |
