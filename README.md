@@ -280,7 +280,8 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 72 passing |
 | Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
 | Real-`cordis` proof that a `prepend`ed waterfall listener runs first and vetoes the chain (the mechanism the automatic path depends on) | ✅ 3 tests |
-| Same suite on the newer harness line (renamed replacement marker + surface system prompt); CI resolves it via the `next` tag, currently 0.1.5-rc.3 | ✅ 72 passing |
+| Same suite on 0.1.5-rc.3 (renamed replacement marker + surface system prompt) | ✅ 72 passing |
+| Same suite on 0.1.7-rc.2 (flat tool-result messages, `session.deriveEventMessage`) | ✅ 72 passing |
 | **End-to-end in the real `dsh-container` image (0.1.5-rc.2, isolated home, mock backend)**: span path (33,373 → 18,431 tokens, `compaction/start` = 0) and in-place slim path (23,429 → 19,995 tokens, no span elided, pruner delegated to the official service) | ✅ both verified |
 | CI workflow (Node 22 / 24) | ✅ green |
 | npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |

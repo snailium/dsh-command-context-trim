@@ -22,7 +22,11 @@ jobs:
         # replacement marker and moved the system prompt onto the surface). The
         # 'Report the harness under test' step prints the exact closure versions
         # resolved, so a leg never claims more than it tested.
-        harness: ['0.1.2-rc.1', 'next']
+        # 0.1.2-rc.1 is the pinned devDependency floor, 0.1.5-rc.3 protects the middle
+        # line (surface system prompt + renamed replacement marker), `next` tracks the
+        # newest line and currently resolves to 0.1.7-rc.2 (flat tool-result messages,
+        # session.deriveEventMessage).
+        harness: ['0.1.2-rc.1', '0.1.5-rc.3', 'next']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

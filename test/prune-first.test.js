@@ -10,6 +10,13 @@ const config = resolveConfig({});
 /** Code-point length of our marker; budgets must leave room for it. */
 const MARKER_CHARS = Array.from(TRIM_MARKER).length;
 
+/** Text of a derived tool-result message, whichever shape this harness uses. */
+function resultText(message) {
+	const first = message.content[0];
+	const blocks = first?.type === 'tool-result' ? first.content : message.content;
+	return blocks.filter((block) => block.type === 'text').map((block) => block.text).join('');
+}
+
 /** One open turn/step holding a task, an assistant tool call and one tool result. */
 function buildSession(resultChars = 30_000) {
 	const session = Session.create('prune-first-test');
@@ -102,8 +109,7 @@ test('shrinks an oversized tool result in place, preserving the call pairing and
 	assert.equal(replacement.data.turn, before.data.turn);
 	assert.equal(replacement.data.step, before.data.step);
 	assert.equal(replacement.data.message.source.callId, 'call-1');
-	assert.equal(replacement.data.message.content[0].toolCallId, 'call-1');
-	const text = replacement.data.message.content[0].content[0].text;
+	const text = resultText(replacement.data.message);
 	assert.ok(text.startsWith('h'.repeat(4096)));
 	assert.ok(text.endsWith('h'.repeat(1024)));
 	assert.ok(text.includes(TRIM_MARKER));

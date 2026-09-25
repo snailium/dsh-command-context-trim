@@ -5,6 +5,22 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-22
+
+### Fixed
+
+- **Harness 0.1.7 compatibility.** 0.1.7 flattens tool-result messages: up to 0.1.5 the content was a single
+  `tool-result` wrapper block, from 0.1.7 the blocks sit directly on the message (`{role:'tool', toolCallId,
+  content:[…]}`), and sessions gained a `deriveEventMessage()` method that the official pruner now uses instead of
+  reading `event.data.message`. The in-place slim read the wrapper unconditionally, so on 0.1.7 it threw
+  `blocks is not iterable` inside the overflow handler — the automatic path then declined and handed every wall hit to
+  compaction without trimming anything. It now reads and rebuilds both shapes and takes the message from
+  `session.deriveEventMessage()` when the session offers it. An unrecognised shape is skipped rather than thrown: this
+  path must never be the reason an overflow recovery is abandoned.
+- Suite is green on the pinned floor (0.1.2-rc.1), 0.1.5-rc.3 and 0.1.7-rc.2 — 72 tests on each. CI gained a fixed
+  0.1.5 leg so the middle line stays covered while `next` moves forward.
+
+
 ## [0.2.2] - 2026-09-22
 
 ### Added
@@ -157,7 +173,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.1.1...v0.2.0
