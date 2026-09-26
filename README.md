@@ -334,10 +334,17 @@ the tree unused.
 
 So automated runs take the other route: write the tuning onto the profile's own compaction row.
 
+The window and output reserve differ per backend, so the generator resolves them from the best source
+available: an explicit `--routes` list, a `--dump` of the composed profile (its `llm-pi-ai` provider
+table carries `contextWindow`/`maxTokens` per model), or — for an instance that does not declare the
+backend yet — the `--context-window`/`--max-tokens` fallback, named with `--model`. Nothing usable in any
+of them is an **error rather than a guess**; `--window-agnostic` is the deliberate ratio-only overlay
+(which needs no window, because `threshold = min(r·W, W − R)` is relative by construction).
+
 ```bash
-node scripts/make-preset-patch.mjs --mode host --ratio 0.75 \
-  --routes fixtures/headless-tuned-preset/routes.json --out /tmp/host.yml
-DSH_HOME=$(mktemp -d) dsh --profile headless --patch /tmp/host.yml "do the task"
+DSH_HOME=$DSH_HOME dsh --profile headless --patch /path/to/route.yml --dump-config > /tmp/dump.yml
+node scripts/make-preset-patch.mjs --mode host --ratio 0.8 --dump /tmp/dump.yml --out /tmp/host.yml
+DSH_HOME=$DSH_HOME dsh --profile headless --patch /tmp/host.yml "do the task"
 ```
 
 Step-by-step for a fresh environment, written to be handed to another session:

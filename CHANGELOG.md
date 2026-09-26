@@ -46,6 +46,14 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **The generator no longer guesses a window.** `scripts/make-preset-patch.mjs` resolves the route capacity
+  from, in order: `--routes`, `--dump <file>` (a `dsh … --dump-config` output, parsed for `llm-pi-ai`'s
+  provider table and `agent-default-model`; the script never spawns dsh), and the
+  `--context-window`/`--max-tokens`/`--model` fallback for an instance that does not declare the backend
+  yet. With none of them it **errors** instead of emitting a threshold that silently depends on an assumed
+  window; `--window-agnostic` is the explicit ratio-only overlay. `--summarizer-max-tokens` is now the
+  compaction call's own cap, kept distinct from a route's output reserve. `lib/dump-routes.js` holds the
+  parser and the resolution order, both covered by tests over a realistic dump fixture.
 - **`docs/headless-compaction-tuning.md`** is the hand-off document for a fresh environment: prerequisites, the
   one-line overlay generation, the boot command, the assertions a test script can make, the optional per-route
   policy form, why a preset does not apply to a headless run, the four failure signatures hit while building it,

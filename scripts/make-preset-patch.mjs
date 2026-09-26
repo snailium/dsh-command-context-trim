@@ -22,6 +22,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { FALLBACK_SUMMARIZER_MAX_TOKENS, planCompactionTuning } from '../lib/compaction-spec.js';
+import { resolveRouteInventory } from '../lib/dump-routes.js';
 import { extractPluginsFromPatch } from '../lib/preset-yaml.js';
 import { buildHostTunedPatch, buildTunedPresetPatch } from '../lib/tuned-preset.js';
 
@@ -33,10 +34,15 @@ const USAGE = `usage: make-preset-patch.mjs --base <preset.patch.yml|plugins.yml
   --description <text> row description
   --order <number>     registry sort order (default: 1.5, i.e. right after standard)
   --ratio <number>     compaction trigger as a fraction of each routed window (default: 0.8)
-  --routes <json>      [{provider, model, contextWindow, maxTokens}] for per-route policies
-                       (omit for the top-level ratio only, applied to every route)
+  --routes <json>      [{provider, model, contextWindow, maxTokens}] — explicit route list
+  --dump <file>        a 'dsh --profile <name> --dump-config' output; its llm-pi-ai provider
+                       table supplies the window and output reserve per model
+  --context-window <n> FALLBACK window, used only when no route could be read
+  --max-tokens <n>     FALLBACK output reserve for that same route (default: 0)
+  --model <p:m>        name the fallback route; without it no per-route policy can be emitted
+  --window-agnostic    deliberately tune the ratio alone, needing no window at all
+  --summarizer-max-tokens <n>  cap for the compaction call itself (default: 8192)
   --route <p:m>        summarization route for the compaction call
-  --max-tokens <n>     compaction call cap when --routes is omitted (default: 8192)
   --registry <mode>    insert (default, for profiles without the registry) or override
   --mode <kind>        preset (default: a preset row + the registry default) or host
                        (write the tuning onto the profile's own compaction-basic row —
@@ -56,20 +62,46 @@ if (routes !== undefined && !Array.isArray(routes)) fail('--routes must contain 
 const presetId = args.id ?? 'standard-tuned';
 const targetRatio = Number(args.ratio ?? 0.8);
 const summarizationRoute = args.route === undefined ? undefined : parseRoute(args.route);
-// Without a route inventory there is nothing to derive per-route headroom from, so the
-// overlay carries the top-level ratio alone — still enough to move the trigger on every
-// route, because a zero headroom lets the ratio (not dsh's 65536 default) decide.
-const plan = routes === undefined ? {
-	config: {
-		thresholdRatio: targetRatio,
-		headroomTokens: 0,
-		maxTokens: Number(args['max-tokens'] ?? FALLBACK_SUMMARIZER_MAX_TOKENS),
-		...(summarizationRoute === undefined ? {} : { summarizationProvider: summarizationRoute.provider, summarizationModel: summarizationRoute.model })
-	},
-	notes: [`no --routes given: thresholdRatio ${targetRatio} applies to every route, with no per-route policies`],
-	policies: [],
-	skipped: []
-} : planCompactionTuning({ routes, targetRatio, summarizationRoute });
+const summarizerMaxTokens = Number(args['summarizer-max-tokens'] ?? FALLBACK_SUMMARIZER_MAX_TOKENS);
+let resolved;
+try {
+	resolved = resolveRouteInventory({
+		routes,
+		dumpText: args.dump === undefined ? undefined : readFileSync(args.dump, 'utf8'),
+		contextWindow: args['context-window'],
+		maxTokens: args['max-tokens'],
+		model: args.model,
+		windowAgnostic: args['window-agnostic'] === true
+	});
+} catch (error) {
+	fail(error instanceof Error ? error.message : String(error));
+}
+// With no route to attach a policy to, the overlay carries the top-level ratio alone —
+// still enough to move the trigger everywhere, because a zero headroom lets the ratio (not
+// dsh's 65536 default) decide. With a window override in hand the achievable trigger is
+// reported for that window, so the operator can see what the numbers mean.
+const plan = resolved.routes.length > 0
+	? planCompactionTuning({ routes: resolved.routes, targetRatio, summarizationRoute })
+	: {
+			config: {
+				thresholdRatio: targetRatio,
+				headroomTokens: 0,
+				maxTokens: summarizerMaxTokens,
+				...(summarizationRoute === undefined ? {} : { summarizationProvider: summarizationRoute.provider, summarizationModel: summarizationRoute.model })
+			},
+			notes: [
+				`${resolved.source}: thresholdRatio ${targetRatio} applies to every route, with no per-route policies`,
+				...(resolved.windowOverride === undefined
+					? []
+					: [
+							`for a ${resolved.windowOverride.contextWindow}-token window with ${resolved.windowOverride.maxTokens} reserved, ` +
+								`that trigger is ~${Math.floor(Math.min(resolved.windowOverride.contextWindow * targetRatio, resolved.windowOverride.contextWindow - resolved.windowOverride.maxTokens))} tokens ` +
+								`(${((Math.min(resolved.windowOverride.contextWindow * targetRatio, resolved.windowOverride.contextWindow - resolved.windowOverride.maxTokens) / resolved.windowOverride.contextWindow) * 100).toFixed(1)} % of the window)`
+						])
+			],
+			policies: [],
+			skipped: []
+		};
 const { patch } = mode === 'host' ? buildHostTunedPatch({ plan }) : buildTunedPresetPatch({
 	base,
 	presetId,
@@ -84,6 +116,8 @@ else {
 	writeFileSync(args.out, patch);
 	process.stderr.write(`wrote ${args.out}\n`);
 }
+process.stderr.write(`  route source: ${resolved.source}\n`);
+for (const note of resolved.notes) process.stderr.write(`  ${note}\n`);
 for (const note of plan.notes) process.stderr.write(`  ${note}\n`);
 process.stderr.write(
 	mode === 'host'
@@ -100,7 +134,11 @@ function parseArgs(argv) {
 			process.exit(0);
 		}
 		const key = arg.replace(/^--/u, '');
-		if (!['base', 'id', 'name', 'description', 'order', 'ratio', 'routes', 'route', 'max-tokens', 'registry', 'mode', 'out'].includes(key)) fail(`unknown option ${arg}`);
+		if (key === 'window-agnostic') {
+			out[key] = true;
+			continue;
+		}
+		if (!['base', 'id', 'name', 'description', 'order', 'ratio', 'routes', 'dump', 'context-window', 'max-tokens', 'model', 'route', 'summarizer-max-tokens', 'registry', 'mode', 'out'].includes(key)) fail(`unknown option ${arg}`);
 		if (key === 'route') {
 			out.route = argv[++index];
 			if (out.route === undefined) fail('--route needs provider:model');

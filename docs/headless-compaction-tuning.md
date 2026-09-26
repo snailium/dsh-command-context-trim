@@ -30,10 +30,34 @@ compacts at **37.5 %** instead of the 80 % the ratio suggests. The fix is to set
 - this repository checked out (the generator and the fixtures live in it);
 - no network beyond `127.0.0.1` is required for the self-check.
 
-## 2. Produce the tuning overlay
+## 2. Tell the script which capacity to tune against
+
+The window and output reserve differ per backend (a card running 128k, another 40k, each with its own
+`maxTokens`), so the generator resolves them from the best source available, in this order:
+
+1. **`--routes <json>`** — an explicit list you supply;
+2. **`--dump <file>`** — the composed profile, i.e. `dsh --profile <name> --patch … --dump-config > dump.yml`.
+   Its `llm-pi-ai` row declares `contextWindow`/`maxTokens` per model (a model without its own numbers
+   inherits the provider level), and `agent-default-model` names the route in use. The script only *parses*
+   that file — it never spawns dsh, which keeps it usable and auditable anywhere;
+3. **`--context-window <n>`** (with `--max-tokens <n>`, and `--model provider:model` to name it) — the
+   fallback for a **brand-new instance whose profile does not declare the backend yet**;
+4. **`--window-agnostic`** — deliberately tune the ratio alone, needing no window at all (see below).
+
+**Nothing usable in any source is an error**, not a guess: a threshold that silently depends on an assumed
+window is worse than no overlay.
 
 ```bash
-node scripts/make-preset-patch.mjs --mode host --ratio 0.8 --out /tmp/tuned.yml
+# a) from a profile that already declares the backend
+DSH_HOME=$DSH_HOME dsh --profile headless --patch /path/to/model-route.yml --dump-config > /tmp/dump.yml
+node scripts/make-preset-patch.mjs --mode host --ratio 0.8 --dump /tmp/dump.yml --out /tmp/tuned.yml
+
+# b) fresh instance, no provider configured yet — tell it the numbers
+node scripts/make-preset-patch.mjs --mode host --ratio 0.8 \
+  --context-window 40960 --max-tokens 8192 --model lc:/models/q.gguf --out /tmp/tuned.yml
+
+# c) multi-backend where every route's reserve is a small share of its window
+node scripts/make-preset-patch.mjs --mode host --ratio 0.8 --window-agnostic --out /tmp/tuned.yml
 ```
 
 That writes a **profile-plane row override** for the compaction entry:
@@ -47,9 +71,10 @@ That writes a **profile-plane row override** for the compaction entry:
     maxTokens: 8192
 ```
 
-`--ratio` is the fraction you want (0 < r ≤ 1). No route inventory is needed: with a zero headroom the
-ratio applies to **every** route, capped only by that route's output reserve. Add
-`--routes <json>` when you want per-route policies (section 6).
+`--ratio` is the fraction you want (0 < r ≤ 1). Where a route is known, the overlay also carries a
+per-route policy whose headroom lets that ratio actually decide; the top level stays window-independent
+(`headroomTokens: 0`, so `threshold = min(r·W, W − R)` on every route). `--summarizer-max-tokens` sets the
+cap for the compaction call itself (default 8192) — it is a different number from a route's output reserve.
 
 ## 3. Run an automated session under it
 
@@ -129,6 +154,14 @@ profile, where the picker and the session API do consume presets — the earlier
 generated preset appearing in the picker and being selectable. It is simply not how a headless session
 gets its compaction settings.
 
+## 6b. Which numbers matter, and which do not
+
+`threshold = min(r·W, W − R)` with a zero headroom. So a route whose output reserve is at most `(1−r)·W`
+reaches exactly the ratio and needs no per-route entry at all — most local backends (reserves around
+10–20 % of the window) are in that group. Only a fat reserve caps it: 81920/65536 reaches 20 % at `r=0.8`,
+and 1M/384k reaches 61.6 %. Those are the routes `--routes`/`--dump` exist for; the per-route headroom
+they emit is `(W − R) − floor(r·W)`.
+
 ## 7b. If you also want the plugin's own trimming in those sessions
 
 The overlay above only sets compaction's thresholds. To get this plugin's `/trim` command and its
@@ -147,6 +180,7 @@ compaction (prune + summarize) fires. Verify the row appears in the composed tre
 | symptom | cause | fix |
 |---|---|---|
 | `MISSING_CREDENTIAL: llm-deepseek: no API key for provider route "deepseek-official"` | the profile's default route is not configured in this fresh home | pass a route overlay/`settings.yaml`, or point `agent-default-model` at your backend |
+| `no route capacity to tune against …` (exit 2) | no source could produce a window: the profile declares no model numbers and no override was given | pass `--dump`, `--context-window` (+ `--max-tokens`, `--model`), or `--window-agnostic` |
 | `TRANSPORT: Stream ended without finish_reason` | the model endpoint answered without an SSE stream | make the endpoint stream (`data:` chunks + `finish_reason` + `[DONE]`) — the bundled mock does |
 | a `settings.yaml` section appears to be ignored | on 0.1.7 a section the composed profile rejects is skipped and the file is renamed | use a `--patch` overlay, which always applies |
 | `node --test` hangs | `node --test` executes every JavaScript file under `test/` | keep servers/fixtures outside `test/` (this repository's mock lives in `fixtures/`) |

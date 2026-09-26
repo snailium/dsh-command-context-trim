@@ -1,0 +1,40 @@
+# A trimmed but realistic `dsh --dump-config` output, used by the parser tests. The shape
+# matches 0.1.7-rc.2: one row per composed plugin, `!!js` values possible elsewhere, and the
+# provider table under `llm-pi-ai`'s config. Note the three interesting cases below:
+# numbers on the model, numbers inherited from the provider level, and a provider with no
+# model list at all (a catalog-driven route, which has no offline window).
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      b70-sycl:
+        apiKeyEnv: B70_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:8080/v1
+        models:
+          - id: /models/Qwen3.8-27B-Q4_K_M.gguf
+            contextWindow: 131072
+            maxTokens: 16384
+            input:
+              - text
+      bonsai-8gb:
+        apiKeyEnv: BONSAI_KEY
+        api: openai-completions
+        contextWindow: 40960
+        maxTokens: 8192
+        models:
+          - id: /home/gwang/bonsai2/models/mtp-lean.gguf
+            input:
+              - text
+      catalog-only:
+        apiKeyEnv: CATALOG_KEY
+        api: openai-completions
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: bonsai-8gb
+    model: /home/gwang/bonsai2/models/mtp-lean.gguf
+- id: session
+  name: '@deepseek-ai/dsh-session'
+  config:
+    root: !!js dshHomePath('sessions')
