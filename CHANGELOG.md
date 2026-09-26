@@ -57,6 +57,12 @@ All notable changes to this project are documented here. This project adheres to
     reload — no runtime registration and no dsh restart — and selecting it works;
   - the settings card renders in the Plugins page (summary line under Official, both fields, staged edit, Save), and the
     save lands as a `context-trim` row in the profile patch with the value typed in the GUI.
+- Compatibility, caught by the matrix: `.volatile()` needs schemastery 3.18.4, and a harness that predates it (0.1.5 and
+  earlier) failed to import the plugin at all until the field marking became a capability probe. On such a host the two
+  fields stay plain — the plugin loads and works, it just shows no card, which is right because its web UI has no
+  `configForms`. The client manifest likewise declares only `platform: web`: naming 0.1.7-only client packages in
+  `dsh.client.inject` would have asked a 0.1.5 host for packages it does not have, and the real requirement (slots,
+  locale, configForms) is gated by cordis in the browser plugin's own `inject` list.
 - Not done, because the framework does not support it: a provider/model **dropdown**. dsh 0.1.7's shared settings form
   exports only `settingsNumberField` and `settingsTextField`, and a hand-drawn control would break the staged-form
   contract. `/trim preset list` covers the need by printing the live route inventory.
