@@ -46,3 +46,19 @@ test('rejects unrecognized, duplicated, and empty-value arguments', () => {
 	assert.deepEqual(parseTrimArguments('a:b c:d'), { error: 'duplicate target route "c:d"' });
 	assert.deepEqual(parseTrimArguments('0'), { error: 'invalid token budget "0"' });
 });
+
+test('parses the preset subcommand, its modifiers and its rejections', () => {
+	assert.deepEqual(parseTrimArguments('preset'), { check: false, preset: true });
+	assert.deepEqual(parseTrimArguments('preset check'), { check: true, preset: true });
+	assert.deepEqual(parseTrimArguments('preset list'), { check: false, preset: true, list: true });
+	assert.deepEqual(parseTrimArguments('preset list check'), { check: true, preset: true, list: true });
+	assert.deepEqual(parseTrimArguments('preset opencode-go:deepseek-v4.1-flash'), {
+		check: false,
+		preset: true,
+		route: { provider: 'opencode-go', model: 'deepseek-v4.1-flash' }
+	});
+	assert.match(parseTrimArguments('list').error, /only meaningful for \/trim preset/);
+	assert.match(parseTrimArguments('preset list list').error, /duplicate "list"/);
+	assert.match(parseTrimArguments('preset 32k').error, /"32k" has no meaning for \/trim preset/);
+	assert.match(parseTrimArguments('preset check check').error, /duplicate "check"/);
+});

@@ -110,7 +110,7 @@ test('registers the trim command with a discoverable hint', () => {
 	const definition = commands.get('trim');
 	assert.ok(definition !== undefined, 'trim was not registered');
 	assert.match(definition.description, /no model call/);
-	assert.equal(definition.input.hint, '[check] [tokens|k] [provider:model]');
+	assert.equal(definition.input.hint, '[check] [tokens|k] [provider:model] | preset [check|list] [provider:model]');
 });
 
 test('rejects an unrecognized argument before touching the session', async () => {
