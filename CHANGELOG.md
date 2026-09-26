@@ -46,6 +46,13 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **The preset choice is per session, and locked once a session starts.** `agentPresets.select()` refuses with
+  `agent-preset/locked` ("This session has already started") as soon as a turn is open or one has completed, because a
+  switch recomposes the preset's isolate realm. The command's completion message now says so instead of pointing at the
+  preset menu as if a running session could switch, and `/trim preset default` was added for the case it describes:
+  it writes `agent-preset-registry.selectedDefault` through the same settings path the official picker uses — but only
+  after the generated preset shows up as a healthy registration, since the new-session path resolves the default and an
+  unknown id would break it (`agent-preset/not-found`).
 - Store-facing metadata, added without changing the version: an explicit **Permissions and failure bounds** section in
   the README (the runtime's only file-system touch is the `/trim preset` patch write; no network, no command execution,
   no credential access), a `dsh.compatibility.dshReleases` map declaring exactly the harness lines this repository has

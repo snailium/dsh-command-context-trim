@@ -37,7 +37,7 @@ const PROVIDERS = {
 	'opencode-go': { models: [{ id: 'deepseek-v4.1-flash' }] }
 };
 
-/** Context stub: registry, configEditor row, profile patch path and llm catalogue. */
+/** Context stub: registry, configEditor row, profile patch path, settings and llm catalogue. */
 function stubContext(request = {}) {
 	const presets = request.presets ?? [
 		{ id: 'standard', name: 'Standard', order: 1, isDefault: true },
@@ -45,14 +45,25 @@ function stubContext(request = {}) {
 	];
 	const documents = request.documents ?? { standard: BASE_PLUGINS, ptc: BASE_PLUGINS };
 	const writes = [];
+	const settingsCalls = [];
 	return {
 		writes,
+		settingsCalls,
 		get(name) {
 			if (name === 'agentPresets') {
 				if (request.registryMissing === true) return undefined;
 				return {
 					async remoteExportList() {
 						return { presets };
+					},
+					async resolve(id) {
+						// Presets our stub "hot reloads" only after the first probe, plus
+						// whatever the request declares as broken or absent.
+						if (request.resolveAlwaysFails === true || (request.resolveFailsOnce !== true && request.resolveFails) || (request.resolveLatePreset === id && (request.resolveLateProbes ?? 1) > 1)) {
+							throw new Error(`Unknown agent preset: ${id}`);
+						}
+						if (request.brokenPreset === id) return { id, broken: 'activation failed: boom' };
+						return { id };
 					},
 					async readDocument(id) {
 						const content = documents[id];
@@ -63,6 +74,15 @@ function stubContext(request = {}) {
 			}
 			if (name === 'configEditor') {
 				return { entries: () => [{ options: { id: 'llm-pi-ai', config: { providers: PROVIDERS } } }] };
+			}
+			if (name === 'settings') {
+				if (request.settingsMissing === true) return undefined;
+				return {
+					async update(ns, patch) {
+						if (request.settingsFails === true) throw new Error('settings: section was rejected');
+						settingsCalls.push({ ns, patch });
+					}
+				};
 			}
 			if (name === 'profileContext') {
 				return writes.length === 0 && request.patchPath === undefined ? undefined : { patchPath: request.patchPath, name: 'web' };
@@ -128,6 +148,8 @@ test('apply mode writes a marker-delimited row and regenerates in place', async 
 		const first = await tuneCompactionPreset(ctx, CONFIG(), request);
 		assert.equal(first.result.kind, 'success');
 		assert.match(first.result.text, /Wrote .*cordis\.patch\.yml/);
+		assert.match(first.result.text, /Use it for a \*\*new\*\* session/);
+		assert.match(first.result.text, /cannot switch/);
 		const written = await readFile(patchPath, 'utf8');
 		assert.match(written, /# >>> dsh-command-context-trim: preset-standard-tuned/);
 		assert.match(written, /- insert:/);
@@ -188,4 +210,64 @@ test('failures stay actionable: no registry, nothing to clone, no compaction row
 	const noPatch = await tuneCompactionPreset(stubContext({ patchPath: undefined }), CONFIG(), { agent: stubAgent(), signal });
 	assert.equal(noPatch.result.kind, 'error');
 	assert.match(noPatch.result.text, /Cannot locate the profile patch/);
+});
+
+test('the default is set only after the preset is registered and healthy', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-preset-default-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		const ctx = stubContext({ patchPath });
+		const { result } = await tuneCompactionPreset(ctx, CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal,
+			setDefault: true
+		});
+		assert.equal(result.kind, 'success');
+		assert.deepEqual(ctx.settingsCalls, [{ ns: 'agent-preset-registry', patch: { selectedDefault: 'standard-tuned' } }]);
+		assert.match(result.text, /Set "standard-tuned" as the default preset for new sessions/);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('an unregistered, broken or unwritable default is refused with a reason', async () => {
+	const signal = new AbortController().signal;
+	const cases = [
+		{
+			request: { resolveAlwaysFails: true },
+			expect: /Left the default unchanged: preset "standard-tuned" is not registered yet/,
+			settings: 0
+		},
+		{
+			request: { brokenPreset: 'standard-tuned' },
+			expect: /registered but failed to activate \(activation failed: boom\)/,
+			settings: 0
+		},
+		{
+			request: { settingsMissing: true },
+			expect: /composes no settings service/,
+			settings: 0
+		},
+		{
+			request: { settingsFails: true },
+			expect: /Could not set it as the default \(settings: section was rejected\)/,
+			settings: 1
+		}
+	];
+	for (const probe of cases) {
+		const directory = await mkdtemp(join(tmpdir(), 'trim-preset-default-'));
+		try {
+			const ctx = stubContext({ ...probe.request, patchPath: join(directory, 'cordis.patch.yml') });
+			const { result } = await tuneCompactionPreset(ctx, CONFIG(), {
+				agent: stubAgent(),
+				signal,
+				setDefault: true
+			});
+			assert.equal(result.kind, 'success', 'the row is still written');
+			assert.match(result.text, probe.expect);
+			assert.equal(ctx.settingsCalls.length + (probe.request.settingsFails === true ? 1 : 0), probe.settings, probe.expect.source);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	}
 });

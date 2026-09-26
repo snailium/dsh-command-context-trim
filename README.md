@@ -304,8 +304,12 @@ dsh), replaces only `compaction-basic`'s config, and appends a marker-delimited 
 
 The generated `compaction-basic` config carries a **per-route `modelPolicies` entry** with the headroom that lets
 `compactionTargetRatio` decide, and an explicit `maxTokens` (headroom would otherwise supply it). Routes whose output
-reserve makes the target unreachable are reported as capped rather than silently written. Then pick the new preset in the
-preset menu — if it is not listed yet, restart dsh (a `patchReload: startup` profile ignores patch edits until boot).
+reserve makes the target unreachable are reported as capped rather than silently written. Then pick the new preset on the **New Session** screen — if it is not listed yet, restart dsh (a `patchReload: startup`
+profile ignores patch edits until boot). A session's preset is locked once its first turn starts (`agent-preset/locked`
+from the registry), because switching one recomposes the preset's whole isolate realm: an already-running session cannot
+switch, which is why `/trim preset default` exists — it sets the default for every new session instead. That write is
+guarded: the command waits (bounded, ~2.5 s) for the generated preset to appear as a **healthy** registration before
+pointing the default at it, because the new-session path resolves the default and an unknown id would fail there.
 
 `scripts/verify-preset-artifact.mjs` checks the whole thing against a real installation without writing anything.
 

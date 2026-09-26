@@ -62,3 +62,16 @@ test('parses the preset subcommand, its modifiers and its rejections', () => {
 	assert.match(parseTrimArguments('preset 32k').error, /"32k" has no meaning for \/trim preset/);
 	assert.match(parseTrimArguments('preset check check').error, /duplicate "check"/);
 });
+
+test('parses the "default" modifier for preset generation only', () => {
+	assert.deepEqual(parseTrimArguments('preset default'), { check: false, preset: true, default: true });
+	assert.deepEqual(parseTrimArguments('preset --default check'), { check: true, preset: true, default: true });
+	assert.deepEqual(parseTrimArguments('preset default opencode-go:m'), {
+		check: false,
+		preset: true,
+		default: true,
+		route: { provider: 'opencode-go', model: 'm' }
+	});
+	assert.match(parseTrimArguments('default').error, /only meaningful for \/trim preset/);
+	assert.match(parseTrimArguments('preset default default').error, /duplicate "default"/);
+});
