@@ -49,3 +49,16 @@
         pruneThresholdChars: 8192
         pruneHeadChars: 4096
         pruneTailChars: 1024
+        # ── preset tuning (used by the `/trim preset` command) ──────────────
+        # Fraction of each routed model's window at which the GENERATED preset
+        # makes compaction fire. This only writes that preset's compaction-basic
+        # `thresholdRatio` (plus a headroom computed to let the ratio decide); it
+        # never changes this plugin's own trimming behaviour.
+        compactionTargetRatio: 0.8
+        # Route the generated preset's summarization call runs on. Optional, and
+        # must be a complete provider+model pair (dsh rejects a half-set pair).
+        # Both strings must match the session route exactly - the settings.yaml
+        # route key and the model id that backend serves.
+        # compactionRoute:
+        #   provider: opencode-go-v41
+        #   model: deepseek-v4.1-flash
