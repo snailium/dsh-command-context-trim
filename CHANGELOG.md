@@ -46,6 +46,10 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **`docs/headless-compaction-tuning.md`** is the hand-off document for a fresh environment: prerequisites, the
+  one-line overlay generation, the boot command, the assertions a test script can make, the optional per-route
+  policy form, why a preset does not apply to a headless run, the four failure signatures hit while building it,
+  and what remains unverified. The drill needs Node only (no python3, no iproute2).
 - **Headless automation takes the profile plane, not a preset.** `scripts/make-preset-patch.mjs` turns a
   route inventory into either a preset row plus `agent-preset-registry` default (the web/session-API route) or,
   with `--mode host`, a row override for the profile's own `compaction-basic` — because a headless profile

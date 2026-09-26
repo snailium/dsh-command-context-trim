@@ -340,6 +340,8 @@ node scripts/make-preset-patch.mjs --mode host --ratio 0.75 \
 DSH_HOME=$(mktemp -d) dsh --profile headless --patch /tmp/host.yml "do the task"
 ```
 
+Step-by-step for a fresh environment, written to be handed to another session:
+[`docs/headless-compaction-tuning.md`](docs/headless-compaction-tuning.md).
 `fixtures/headless-tuned-preset/run-headless-check.sh` performs that drill against a fresh temporary home,
 asserts `--dump-config` carries the tuned config on `compaction-basic`, and runs one real session.
 Its README records what the drill does *not* assert, and why: the New Session picker label reflects a
