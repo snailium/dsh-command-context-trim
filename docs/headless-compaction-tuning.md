@@ -35,14 +35,18 @@ compacts at **37.5 %** instead of the 80 % the ratio suggests. The fix is to set
 The window and output reserve differ per backend (a card running 128k, another 40k, each with its own
 `maxTokens`), so the generator resolves them from the best source available, in this order:
 
-1. **`--routes <json>`** — an explicit list you supply;
-2. **`--dump <file>`** — the composed profile, i.e. `dsh --profile <name> --patch … --dump-config > dump.yml`.
-   Its `llm-pi-ai` row declares `contextWindow`/`maxTokens` per model (a model without its own numbers
-   inherits the provider level), and `agent-default-model` names the route in use. The script only *parses*
-   that file — it never spawns dsh, which keeps it usable and auditable anywhere;
-3. **`--context-window <n>`** (with `--max-tokens <n>`, and `--model provider:model` to name it) — the
-   fallback for a **brand-new instance whose profile does not declare the backend yet**;
-4. **`--window-agnostic`** — deliberately tune the ratio alone, needing no window at all (see below).
+1. **a base inventory** — **`--routes <json>`** (an explicit list you supply), else **`--dump <file>`**: the
+   composed profile from `dsh --profile <name> --patch … --dump-config > dump.yml`. Its `llm-pi-ai` row
+   declares `contextWindow`/`maxTokens` per model (a model without its own numbers inherits the provider
+   level), and `agent-default-model` names the route in use. The script only *parses* that file — it never
+   spawns dsh, which keeps it usable and auditable anywhere;
+2. **`--context-window <n>` / `--max-tokens <n>` / `--model provider:model` — an OVERRIDE.** The operator
+   passing these knows the backend better than its declaration does: a card that serves 40k while the
+   profile claims 128k, or a fresh instance whose profile declares no backend yet. The named route gets
+   exactly those numbers (a route the base does not declare is added); with no `--model` the **active**
+   route is the target, and if the base names no active route either, every known route takes them. Only
+   the numbers you pass are replaced — a route keeps its declared reserve if you pass only a window;
+3. **`--window-agnostic`** — deliberately tune the ratio alone, needing no window at all (see below).
 
 **Nothing usable in any source is an error**, not a guess: a threshold that silently depends on an assumed
 window is worse than no overlay.
@@ -52,7 +56,7 @@ window is worse than no overlay.
 DSH_HOME=$DSH_HOME dsh --profile headless --patch /path/to/model-route.yml --dump-config > /tmp/dump.yml
 node scripts/make-preset-patch.mjs --mode host --ratio 0.8 --dump /tmp/dump.yml --out /tmp/tuned.yml
 
-# b) fresh instance, no provider configured yet — tell it the numbers
+# b) force the numbers this backend really serves (overrides the declaration)
 node scripts/make-preset-patch.mjs --mode host --ratio 0.8 \
   --context-window 40960 --max-tokens 8192 --model lc:/models/q.gguf --out /tmp/tuned.yml
 
@@ -181,6 +185,7 @@ compaction (prune + summarize) fires. Verify the row appears in the composed tre
 |---|---|---|
 | `MISSING_CREDENTIAL: llm-deepseek: no API key for provider route "deepseek-official"` | the profile's default route is not configured in this fresh home | pass a route overlay/`settings.yaml`, or point `agent-default-model` at your backend |
 | `no route capacity to tune against …` (exit 2) | no source could produce a window: the profile declares no model numbers and no override was given | pass `--dump`, `--context-window` (+ `--max-tokens`, `--model`), or `--window-agnostic` |
+| `… is not declared by the base, so --max-tokens alone cannot describe it` | an override named a route the base does not know, with no window for it | pass `--context-window` too |
 | `TRANSPORT: Stream ended without finish_reason` | the model endpoint answered without an SSE stream | make the endpoint stream (`data:` chunks + `finish_reason` + `[DONE]`) — the bundled mock does |
 | a `settings.yaml` section appears to be ignored | on 0.1.7 a section the composed profile rejects is skipped and the file is renamed | use a `--patch` overlay, which always applies |
 | `node --test` hangs | `node --test` executes every JavaScript file under `test/` | keep servers/fixtures outside `test/` (this repository's mock lives in `fixtures/`) |

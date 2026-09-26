@@ -27,15 +27,31 @@ test('resolveRouteInventory honours the documented source order', () => {
 	assert.equal(fromDump.routes.length, 2);
 	assert.ok(fromDump.notes.some((note) => /catalog-only.*no model list/u.test(note)));
 
-	// The override is a FALLBACK: when the profile declares the route, that wins.
-	const dumpWins = resolveRouteInventory({ dumpText: SAMPLE, contextWindow: 999, model: 'lc:/models/q.gguf' });
-	assert.equal(dumpWins.source, 'composed profile dump');
-	assert.equal(dumpWins.routes.length, 2, 'an override never replaces numbers the profile already declares');
+	// The override OVERRIDES: the operator who passes numbers knows the backend better
+	// than its declaration does (a card serving 40k while the profile claims 128k).
+	const overridden = resolveRouteInventory({ dumpText: SAMPLE, contextWindow: 40960, maxTokens: 8192, model: 'b70-sycl:/models/Qwen3.8-27B-Q4_K_M.gguf' });
+	assert.equal(overridden.source, 'window/max-tokens override (b70-sycl)');
+	assert.deepEqual(overridden.routes.filter((route) => route.provider === 'b70-sycl'), [
+		{ provider: 'b70-sycl', model: '/models/Qwen3.8-27B-Q4_K_M.gguf', contextWindow: 40960, maxTokens: 8192 }
+	], 'the named route takes the given numbers');
+	assert.equal(overridden.routes.length, 2, 'the other routes keep what the profile declares');
+	assert.ok(overridden.notes.some((note) => /replaces route "b70-sycl"/u.test(note)));
+
+	// No --model: the active route is the target; with no active route either, every known route.
+	const byActive = resolveRouteInventory({ dumpText: SAMPLE, contextWindow: 65536 });
+	assert.deepEqual(byActive.routes.find((route) => route.provider === 'bonsai-8gb'), {
+		provider: 'bonsai-8gb',
+		model: '/home/gwang/bonsai2/models/mtp-lean.gguf',
+		contextWindow: 65536,
+		maxTokens: 8192
+	}, 'the active route takes the new window and keeps its declared reserve');
+	assert.equal(byActive.routes.find((route) => route.provider === 'b70-sycl').contextWindow, 131072, 'the non-active route is untouched');
 
 	// No numbers anywhere in the dump, but the caller knows the window: a fresh instance
 	// whose profile does not declare the backend yet.
 	const bare = '- id: session\n  name: x\n';
 	const named = resolveRouteInventory({ dumpText: bare, contextWindow: 40960, model: 'lc:/models/q.gguf' });
+	assert.equal(named.source, 'window/max-tokens override (lc)');
 	assert.deepEqual(named.routes, [{ provider: 'lc', model: '/models/q.gguf', contextWindow: 40960, maxTokens: 0 }], 'no reserve means no reserve');
 	assert.ok(named.notes.some((note) => /override/u.test(note)));
 
@@ -57,4 +73,8 @@ test('an undeterminable window is an error, never a guess', () => {
 	assert.throws(() => resolveRouteInventory({ routes: [{ provider: 'p' }] }), /need non-empty provider and model/u);
 	assert.throws(() => resolveRouteInventory({ contextWindow: 100, model: 'nocolon' }), /--model must read provider:model/u);
 	assert.throws(() => resolveRouteInventory({ routes: [{ provider: 'p', model: 'm', contextWindow: 1.5 }] }), /--routes contextWindow must be a positive integer/u);
+	assert.throws(
+		() => resolveRouteInventory({ contextWindow: undefined, maxTokens: 4096, model: 'new:/models/x.gguf' }),
+		/not declared by the base, so --max-tokens alone cannot describe it/u
+	);
 });

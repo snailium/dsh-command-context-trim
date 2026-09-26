@@ -59,9 +59,9 @@ What it asserts, and what it deliberately does **not**:
 ## Route inventory
 
 `routes.json` is `[{provider, model, contextWindow, maxTokens}]` — the same shape `/trim preset` reads
-from the live profile. Three other sources exist, in the documented order: `--dump <file>` (a
-`dsh --dump-config` output, parsed for its `llm-pi-ai` provider table and `agent-default-model`),
-`--context-window`/`--max-tokens`/`--model` as a fallback for an instance that does not declare the
-backend yet, and `--window-agnostic` to tune the ratio alone. With none of them the generator **errors**
+from the live profile. Three other sources exist: `--dump <file>` (a `dsh --dump-config` output, parsed for its `llm-pi-ai`
+provider table and `agent-default-model`), `--context-window`/`--max-tokens`/`--model` as an **override**
+(the named route — or the active one — takes exactly those numbers, and only those numbers are replaced),
+and `--window-agnostic` to tune the ratio alone. With none of them the generator **errors**
 rather than assuming a window. `--summarizer-max-tokens` is the compaction call's own cap, which is a
 different number from a route's output reserve.

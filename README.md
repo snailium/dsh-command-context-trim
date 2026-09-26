@@ -335,10 +335,10 @@ the tree unused.
 So automated runs take the other route: write the tuning onto the profile's own compaction row.
 
 The window and output reserve differ per backend, so the generator resolves them from the best source
-available: an explicit `--routes` list, a `--dump` of the composed profile (its `llm-pi-ai` provider
-table carries `contextWindow`/`maxTokens` per model), or — for an instance that does not declare the
-backend yet — the `--context-window`/`--max-tokens` fallback, named with `--model`. Nothing usable in any
-of them is an **error rather than a guess**; `--window-agnostic` is the deliberate ratio-only overlay
+available: an explicit `--routes` list or a `--dump` of the composed profile (its `llm-pi-ai` provider
+table carries `contextWindow`/`maxTokens` per model) as the base, with `--context-window`/`--max-tokens`/
+`--model` as an **override** for the numbers a backend really serves. Nothing usable in any of them is an
+**error rather than a guess**; `--window-agnostic` is the deliberate ratio-only overlay
 (which needs no window, because `threshold = min(r·W, W − R)` is relative by construction).
 
 ```bash
