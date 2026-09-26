@@ -263,6 +263,12 @@ preset menu — if it is not listed yet, restart dsh (a `patchReload: startup` p
 
 `scripts/verify-preset-artifact.mjs` checks the whole thing against a real installation without writing anything.
 
+The route field is free text rather than a dropdown: dsh 0.1.7's shared settings form exposes only
+`settingsNumberField` and `settingsTextField` (see `@deepseek-ai/dsh-client-ui-primitives`' typed surface), and drawing a
+custom control would step outside the staged-form contract — the frame, the override/reset semantics and the fenced write
+all come from the shared form. `/trim preset list` is the inventory view instead: it prints every routable provider/model
+with its window, output reserve and the trigger it would get.
+
 Both keys are also editable in the GUI: **Plugins → Context trim** shows a card with the compaction trigger and the
 summarization route. Only fields marked `.volatile()` appear there, and a volatile field arrives at the plugin as a live
 handle, so every read goes through `readConfig` and an edit takes effect on the next invocation without a reload.

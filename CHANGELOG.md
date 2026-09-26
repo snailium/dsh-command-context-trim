@@ -50,8 +50,16 @@ All notable changes to this project are documented here. This project adheres to
   (`# >>> dsh-command-context-trim: preset-<id> … >>>`), so it is idempotent, reviewable and removable by deleting the
   block. One rolling backup (`cordis.patch.yml.bak-trim-preset`) is kept.
 - Nothing here changes trimming: the trigger ratio only shapes the preset.
-- Verified on 0.1.7-rc.2: the artifact parses with the harness's YAML stack, and a profile that carries the generated row
-  composes cleanly (1,447-line dump, `compaction` group with its isolate realm intact, threshold and policies present).
+- Verified on 0.1.7-rc.2, in an isolated instance and never in production:
+  - the artifact parses with the harness's YAML stack, and a profile that carries the generated row composes cleanly
+    (1,447-line dump, `compaction` group with its isolate realm intact, threshold and policies present);
+  - a generated row appended to a live profile patch appears in the preset menu as "Standard (tuned 75%)" after a client
+    reload — no runtime registration and no dsh restart — and selecting it works;
+  - the settings card renders in the Plugins page (summary line under Official, both fields, staged edit, Save), and the
+    save lands as a `context-trim` row in the profile patch with the value typed in the GUI.
+- Not done, because the framework does not support it: a provider/model **dropdown**. dsh 0.1.7's shared settings form
+  exports only `settingsNumberField` and `settingsTextField`, and a hand-drawn control would break the staged-form
+  contract. `/trim preset list` covers the need by printing the live route inventory.
 
 
 ## [0.2.3] - 2026-09-22
