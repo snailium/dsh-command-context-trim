@@ -1,3 +1,8 @@
 node_modules/
 *.log
 .DS_Store
+*.tgz
+.e2e-preset/
+.settings-preview-017/
+.dsh-isolated-*/
+test/compat/__pycache__/

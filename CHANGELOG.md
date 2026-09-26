@@ -33,6 +33,17 @@ All notable changes to this project are documented here. This project adheres to
   the original task statement — may be elided. The newest human instruction is still never crossed. `emergencyTrim`
   (default true) restores the old behaviour when off.
 
+- **Settings card.** The Plugins page gains a **Context trim** card for `compactionTargetRatio` and `compactionRoute`.
+  The Host half marks exactly those two fields `.volatile()` (which is what makes the loader entry a settings namespace
+  at all) and re-reads its configuration per invocation, because a volatile field arrives as a live handle. The client
+  half is a classic-script bundle that registers into `plugins.item` behind `configForms.whileServed([entryId])`,
+  renders only the shared `SettingsForm` body, and returns the row's one-line summary. A web host without `configForms`
+  gets no registration instead of a broken page.
+  **Found by the isolated real-boot check:** a client half must register itself through
+  `window.__ModuleLoader__.load({ id, factory })`; a plain ES module is fetched and then rejected with "loaded without
+  registering … via __ModuleLoader__.load", which took the whole plugin's entry down with it. The card now follows the
+  in-box bundle format, and a test asserts it.
+
 ### Notes
 
 - The generated row lands in the profile patch inside marker comments

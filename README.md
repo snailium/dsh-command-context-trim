@@ -263,6 +263,10 @@ preset menu — if it is not listed yet, restart dsh (a `patchReload: startup` p
 
 `scripts/verify-preset-artifact.mjs` checks the whole thing against a real installation without writing anything.
 
+Both keys are also editable in the GUI: **Plugins → Context trim** shows a card with the compaction trigger and the
+summarization route. Only fields marked `.volatile()` appear there, and a volatile field arrives at the plugin as a live
+handle, so every read goes through `readConfig` and an edit takes effect on the next invocation without a reload.
+
 ## Reading the session log
 
 `compaction/prune` has **two producers**, and only one of them is this plugin:

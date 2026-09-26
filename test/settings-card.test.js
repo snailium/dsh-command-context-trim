@@ -60,7 +60,14 @@ test('the client entry id matches the loader row id, which is what the page keys
 });
 
 test('the card follows the 0.1.7 contract: summary one-liner, shared body, no own frame', () => {
-	assert.match(clientSource, /export const inject = \['slots', 'locale', 'configForms'\]/u);
+	// The harness serves client halves as classic scripts that must register
+	// themselves through the module loader; a plain ESM file is fetched and rejected.
+	assert.match(clientSource, /window\.__ModuleLoader__\.load\(\{/u);
+	assert.match(clientSource, /id: 'dsh-command-context-trim'/u, 'the registration id must be the package name');
+	assert.match(clientSource, /factory: \(require\) => \{/u);
+	assert.match(clientSource, /const inject = \['slots', 'locale', 'configForms'\]/u);
+	assert.match(clientSource, /exports\.apply = apply/u);
+	assert.equal(/^\s*(import|export)\s/mu.test(clientSource), false, 'no ES module syntax in a served client bundle');
 	assert.match(clientSource, /if \(props\.view === 'summary'\) return t\('description'\)/u);
 	assert.match(clientSource, /name: 'plugins\.item'/u);
 	assert.match(clientSource, /h\(\s*SettingsForm,/u);
