@@ -37,7 +37,14 @@ test('compaction tuning: the ratio is bounded and the route is all-or-nothing', 
 	assert.throws(() => resolveConfig({ compactionRoute: { provider: 'p' } }), /must be set together as non-empty strings/);
 	assert.throws(() => resolveConfig({ compactionRoute: { provider: '', model: 'm' } }), /must be set together as non-empty strings/);
 	assert.throws(() => resolveConfig({ compactionRoute: { provider: 'p', model: 'm', extra: 1 } }), /compactionRoute.extra is not a supported key/);
-	assert.throws(() => resolveConfig({ compactionRoute: 'p/m' }), /compactionRoute must be an object with provider and model/);
+	assert.throws(() => resolveConfig({ compactionRoute: 'p/m' }), /must read "provider:model"/);
+	assert.deepEqual({ ...resolveConfig({ compactionRoute: 'opencode-go:deepseek-v4.1-flash' }).compactionRoute }, {
+		provider: 'opencode-go',
+		model: 'deepseek-v4.1-flash'
+	}, 'the settings card edits one text field, so the string form is accepted');
+	assert.deepEqual({ ...resolveConfig({ compactionRoute: ' lc : /models/q.gguf ' }).compactionRoute }, { provider: 'lc', model: '/models/q.gguf' });
+	assert.equal(resolveConfig({ compactionRoute: '   ' }).compactionRoute, undefined, 'a blank field clears the route');
+	assert.throws(() => resolveConfig({ compactionRoute: 'no-colon' }), /must read "provider:model"/);
 	assert.throws(() => resolveConfig({ compactionRoute: null }), /compactionRoute must be an object with provider and model/);
 });
 
