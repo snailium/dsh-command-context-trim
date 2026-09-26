@@ -5,6 +5,38 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-26
+
+### Added
+
+- **`/trim preset` — generate a compaction-tuned agent preset from the live routes.** Compaction reads its policy at
+  composition time, inside an agent-preset isolate realm that a host-plane plugin cannot reach, so the honest way to move
+  the threshold is to contribute a preset row (an ordinary patch row since 0.1.7). The command clones the preset the
+  session is using, replaces only `compaction-basic`'s config, and reports what it did:
+  - `/trim preset check` prints the generated row and writes nothing;
+  - `/trim preset list` shows every routable provider/model with its window, output reserve and the trigger it would get;
+  - `/trim preset <provider>:<model>` generates using that route as the summarizer for this run.
+  The clone is taken at generation time through `agentPresets.readDocument()`, which is what keeps a generated preset
+  current: a hand-copied preset rots the moment dsh changes its own composition (exactly how one production preset died
+  on the 0.1.7 upgrade).
+- **`compactionTargetRatio` (default 0.8)** — the fraction of each routed model's window at which the generated preset
+  makes compaction fire. It writes `thresholdRatio` **and** a per-route `headroomTokens` computed so the ratio actually
+  decides: dsh's own default headroom (65536) otherwise caps a 131072-token route at 37.5 %.
+- **`compactionRoute` (optional `{provider, model}`)** — the route the generated preset's summarization call runs on;
+  validated as an all-or-nothing pair, mirroring dsh's rule for `summarizationProvider`/`summarizationModel`.
+- `scripts/verify-preset-artifact.mjs` — proves a generated row against a real installation: it clones the shipped
+  `standard` preset's plugin list, generates the row, and parses the result with the harness's own YAML stack.
+
+### Notes
+
+- The generated row lands in the profile patch inside marker comments
+  (`# >>> dsh-command-context-trim: preset-<id> … >>>`), so it is idempotent, reviewable and removable by deleting the
+  block. One rolling backup (`cordis.patch.yml.bak-trim-preset`) is kept.
+- Nothing here changes trimming: the trigger ratio only shapes the preset.
+- Verified on 0.1.7-rc.2: the artifact parses with the harness's YAML stack, and a profile that carries the generated row
+  composes cleanly (1,447-line dump, `compaction` group with its isolate realm intact, threshold and policies present).
+
+
 ## [0.2.3] - 2026-09-22
 
 ### Fixed
@@ -173,7 +205,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.0...v0.2.1
