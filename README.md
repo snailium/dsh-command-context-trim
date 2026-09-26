@@ -174,12 +174,28 @@ tail is a hard boundary and the final message is never dropped.
 
 ## Compatibility
 
-| Harness | State |
-|---|---|
-| 0.1.2-rc.1 (`latest`) | ✅ full suite green |
-| 0.1.5-rc.2 (`next`) | ✅ full suite green |
+One host half loads on every supported harness line; two features are scoped to the line that introduced the plane they
+need. Verified state, by feature:
 
-Two harness changes between those lines are handled without a version check:
+| Harness | `/trim` | automatic trim | emergency trim | `/trim preset` | settings card |
+|---|---|---|---|---|---|
+| 0.1.2-rc.1 (the pinned devDependency floor) | ✅ | ✅ | ✅ | ❌ clear error | ❌ absent |
+| 0.1.5-rc.3 | ✅ | ✅ | ✅ | ❌ clear error | ❌ absent |
+| 0.1.7-rc.2 (`next`) | ✅ | ✅ | ✅ | ✅ | ✅ (schemastery ≥ 3.18.4) |
+
+What the ❌ entries mean in practice:
+
+- **`/trim preset`** needs the preset plane (`agentPresets`), the config-editor service and `profileContext.patchPath`.
+  Every package behind those — `dsh-agent-preset-registry`, `dsh-config-editor` — first appears at **0.1.7-alpha.1**, so
+  an older harness gets "this profile composes no agent-preset registry" instead of a half-working command. Nothing else
+  depends on them: the command lives in its own module, imported only when it runs.
+- **The settings card** needs a 0.1.7 web host (`dsh-client-modules`, `dsh-client-ui-primitives`) and schemastery
+  **3.18.4** for `.volatile()`, which is what makes an entry a settings namespace at all. Two things keep an older
+  harness harmless: the schema marks those fields through a capability probe, so the plugin still imports (an
+  unconditional `.volatile()` call broke 0.1.5 outright until the compat matrix caught it), and the browser half
+  returns immediately when `configForms` is missing rather than registering into services that do not exist.
+
+Two harness changes are handled without any version check, because both are shape-probed from the session itself:
 
 - **The replacement marker was renamed** — `{op: 'replace', start, end}` became `{op: 'replace', startSeq, endSeq}`.
   The plugin probes a throwaway detached session with each known shape at first use and writes the accepted one.
@@ -191,6 +207,11 @@ Two harness changes between those lines are handled without a version check:
 Because of the second change, the fixed request overhead is now the tool schemas plus any other non-surface
 request data; on 0.1.2 it also included the system prompt. A trim's budget itself is unaffected — it comes from
 the token meter's total, whichever way the harness splits that total.
+
+What the matrix proves, and what it does not: each CI leg installs that harness line's **real packages** and runs the
+suite against them (that is what caught the schemastery regression), so this is contract-level verification rather than a
+boot. Live instances have been booted on 0.1.5 (the `dsh-container` E2E below) and on 0.1.7 (the isolated-instance
+checks below); a booted 0.1.5 **web** host — and therefore the browser half on that line — has never been exercised.
 
 ## Configuration
 
@@ -334,16 +355,21 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | Isolated `DSH_HOME` install (`dsh plugin add file:…`) reconciling dependency **and** bundle layer | ✅ verified |
 | Composed profile tree contains the `context-trim` insert row (`dsh --dump-config`) | ✅ verified |
 | Profile boot with the plugin mounted (no load error) | ✅ reaches the credential check cleanly |
-| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 72 passing |
+| Same suite against the pinned **published** harness packages (`npm ci`) | ✅ 103 passing |
 | Integration against the **real** `ctx.tokenMeter`: measured drop equals the claimed shadow price, and a fresh meter replaying the trimmed log reaches the identical total | ✅ 4 tests |
 | Real-`cordis` proof that a `prepend`ed waterfall listener runs first and vetoes the chain (the mechanism the automatic path depends on) | ✅ 3 tests |
-| Same suite on 0.1.5-rc.3 (renamed replacement marker + surface system prompt) | ✅ 72 passing |
-| Same suite on 0.1.7-rc.2 (flat tool-result messages, `session.deriveEventMessage`) | ✅ 72 passing |
+| Same suite on 0.1.5-rc.3 (renamed replacement marker + surface system prompt) | ✅ 103 passing |
+| Same suite on 0.1.7-rc.2 (flat tool-result messages, `session.deriveEventMessage`) | ✅ 103 passing |
+| Same suite with schemastery 3.18.2 forced in, the version that broke the 0.1.5 leg (capability probe) | ✅ 103 passing |
+| `scripts/verify-preset-artifact.mjs`: the generated preset row, cloned from the **_shipped_** `standard` preset and parsed by the harness's own YAML stack | ✅ 19 plugin entries, isolate realm intact, 3 model policies |
+| Isolated 0.1.7 instance (`start-isolated-dsh.sh`; own `DSH_HOME`, port 3091, mock provider): a generated row appended to the profile patch appears in the preset menu as *Standard (tuned 75%)* and is selectable — no restart, no runtime registration | ✅ verified |
+| Same instance: the Plugins page lists the card under *Official* with its summary line, both fields render, a staged edit saves, and the value lands as a `context-trim` row in the profile patch | ✅ verified |
+| Headless client-bundle test (fake `window.__ModuleLoader__`): summary one-liner, two-field form body, older-host no-op | ✅ 3 tests |
 | **End-to-end in the real `dsh-container` image (0.1.5-rc.2, isolated home, mock backend)**: span path (33,373 → 18,431 tokens, `compaction/start` = 0) and in-place slim path (23,429 → 19,995 tokens, no span elided, pruner delegated to the official service) | ✅ both verified |
 | CI workflow (Node 22 / 24) | ✅ green |
 | npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |
 | Isolated profile install **from the npm registry** (dependency + bundle layer + composed insert row) | ✅ 0.1.0 |
-| End-to-end in the web GUI against a small-window model | ⏳ harness ready, not yet run |
+| End-to-end in a real 0.1.7 boot (isolated home, mock backend): a request REFUSED at 10,664 tokens came back ACCEPTED at 7,230 after the automatic trim, with `compaction/start` = 0 | ✅ verified |
 
 ## License
 
