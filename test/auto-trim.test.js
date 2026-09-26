@@ -452,3 +452,92 @@ test('falls back to a span elision only when slimming in place is not enough', a
 	assert.deepEqual(action, { kind: 'retry' });
 	assert.equal(hasUserMessageReplacement(session), true, 'the span fallback must run');
 });
+
+/** A surface whose only freeable mass sits inside the head protection. */
+function buildHeadHeavySession() {
+	const session = Session.create('auto-trim-emergency');
+	// Head-protected (protectHeadNodes 1): the only large node on the surface.
+	session.append('user/message', taskMessage('T'.repeat(30_000)), { surfaceOp: 'append' });
+	// The newest human instruction is the anchor and stays untouchable.
+	session.append('user/message', taskMessage('keep me'), { surfaceOp: 'append' });
+	session.append('turn/start', { turn: 1 });
+	session.append('step/start', { turn: 1, step: 1 });
+	session.append(
+		'assistant/message',
+		{
+			turn: 1,
+			step: 1,
+			stream: [],
+			message: createAssistantMessage({ content: [{ type: 'text', text: 'ok' }], source: { provider: 'mock', model: 'mock-1' } })
+		},
+		{ surfaceOp: 'append' }
+	);
+	return session;
+}
+
+test('a downstream recovery is respected: no emergency trim is taken', async () => {
+	const { listener, logs } = captureContext({});
+	const session = buildHeadHeavySession();
+	const agent = stubAgent(session);
+	const generation = session.surface.replaceGeneration;
+	const action = await listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, () => ({ kind: 'retry' }));
+	assert.deepEqual(action, { kind: 'retry' }, 'compaction\'s own retry is passed through');
+	assert.equal(session.surface.replaceGeneration, generation, 'nothing is trimmed when compaction recovered');
+	assert.equal(logs.some((line) => line.includes('emergency')), false);
+});
+
+test('a failed compaction is rescued by one emergency trim of the head-protected statement', async () => {
+	const { listener, logs } = captureContext({});
+	const session = buildHeadHeavySession();
+	const agent = stubAgent(session);
+	const generation = session.surface.replaceGeneration;
+	const action = await listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, () => undefined);
+	assert.deepEqual(action, { kind: 'retry' }, 'the turn is rescued instead of dying with the original error');
+	assert.ok(session.surface.replaceGeneration > generation, 'the surface changed');
+	assert.ok(hasUserMessageReplacement(session), 'the emergency trim elided a span');
+	assert.equal(logs.some((line) => line.includes('compaction could not recover; emergency')), true, `expected the emergency log, saw ${JSON.stringify(logs)}`);
+
+	// Once per episode: a second failure in the same episode must not trim again.
+	const before = session.surface.replaceGeneration;
+	logs.length = 0;
+	const second = await listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, () => undefined);
+	assert.equal(second, undefined, 'the emergency budget is spent, so the original error is preserved');
+	assert.equal(session.surface.replaceGeneration, before);
+	assert.equal(logs.some((line) => line.includes('emergency trim is spent')), true);
+});
+
+test('emergencyTrim: false keeps the old hand-off behaviour', async () => {
+	const { listener, logs } = captureContext({ emergencyTrim: false });
+	const session = buildHeadHeavySession();
+	const agent = stubAgent(session);
+	const generation = session.surface.replaceGeneration;
+	const action = await listener('agent/request-error').listener({ agent, failure: overflow, signal: new AbortController().signal }, () => undefined);
+	assert.equal(action, undefined);
+	assert.equal(session.surface.replaceGeneration, generation);
+	assert.equal(logs.some((line) => line.includes('emergency')), false);
+});
+
+test('a throwing downstream is swallowed only when the emergency path can run', async () => {
+	const withEmergency = captureContext({});
+	const session = buildHeadHeavySession();
+	const generation = session.surface.replaceGeneration;
+	const rescued = await withEmergency.listener('agent/request-error').listener(
+		{ agent: stubAgent(session), failure: overflow, signal: new AbortController().signal },
+		() => {
+			throw new Error('compaction blew up');
+		}
+	);
+	assert.deepEqual(rescued, { kind: 'retry' });
+	assert.ok(session.surface.replaceGeneration > generation);
+
+	const withoutEmergency = captureContext({ emergencyTrim: false });
+	await assert.rejects(
+		withoutEmergency.listener('agent/request-error').listener(
+			{ agent: stubAgent(buildHeadHeavySession()), failure: overflow, signal: new AbortController().signal },
+			() => {
+				throw new Error('compaction blew up');
+			}
+		),
+		/compaction blew up/
+	);
+});

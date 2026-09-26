@@ -27,6 +27,12 @@ All notable changes to this project are documented here. This project adheres to
 - `scripts/verify-preset-artifact.mjs` — proves a generated row against a real installation: it clones the shipped
   `standard` preset's plugin list, generates the row, and parses the result with the harness's own YAML stack.
 
+- **Emergency trim.** When the plugin cannot trim and compaction cannot recover either, the turn used to die with the
+  original request error. The plugin now wraps compaction by calling `next()`, inspects whether anything downstream
+  acted, and if not takes one last-resort trim (at most one per overflow episode) in which the head-protected nodes —
+  the original task statement — may be elided. The newest human instruction is still never crossed. `emergencyTrim`
+  (default true) restores the old behaviour when off.
+
 ### Notes
 
 - The generated row lands in the profile patch inside marker comments

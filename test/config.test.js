@@ -7,6 +7,7 @@ test('defaults match the documented bundle patch', () => {
 	assert.equal(resolved.autoTrim, true);
 	assert.equal(resolved.maxAutoTrimRetries, 3);
 	assert.equal(resolved.autoTrimShrink, 0.5);
+	assert.equal(resolved.emergencyTrim, true);
 	assert.equal(resolved.compactionTargetRatio, 0.8);
 	assert.equal(resolved.compactionRoute, undefined);
 	assert.equal(resolved.targetRatio, DEFAULTS.targetRatio);
@@ -38,4 +39,9 @@ test('compaction tuning: the ratio is bounded and the route is all-or-nothing', 
 	assert.throws(() => resolveConfig({ compactionRoute: { provider: 'p', model: 'm', extra: 1 } }), /compactionRoute.extra is not a supported key/);
 	assert.throws(() => resolveConfig({ compactionRoute: 'p/m' }), /compactionRoute must be an object with provider and model/);
 	assert.throws(() => resolveConfig({ compactionRoute: null }), /compactionRoute must be an object with provider and model/);
+});
+
+test('emergencyTrim is a boolean switch', () => {
+	assert.equal(resolveConfig({ emergencyTrim: false }).emergencyTrim, false);
+	assert.throws(() => resolveConfig({ emergencyTrim: 'yes' }), /emergencyTrim must be a boolean/);
 });

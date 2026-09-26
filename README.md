@@ -113,6 +113,13 @@ Scope, deliberately narrow:
 The per-episode retry budget (`maxAutoTrimRetries`, default 3) resets when a completed assistant message lands or the
 agent goes idle, mirroring compaction's own overflow accounting. Set `autoTrim: false` to keep trimming manual.
 
+**If compaction cannot recover either, trim steps in.** When the plugin declines, it calls `next()` — running
+compaction's own listener — and inspects the result. A value means compaction pruned and/or summarized and the loop is
+already retrying. `undefined` means the original request error is about to be preserved and the turn will fail; at that
+point the plugin takes **one emergency trim** (at most once per overflow episode), in which the head-protected nodes — the
+original task statement — become elidable too. The newest human instruction is still never crossed. Set
+`emergencyTrim: false` to keep the old hand-off behaviour.
+
 **The cheap reduction runs first.** On the wall the plugin slims oversized tool results **in place** (head + marker + tail,
 the same transform DSH's own pruner performs) and only elides a whole span when that is not enough:
 

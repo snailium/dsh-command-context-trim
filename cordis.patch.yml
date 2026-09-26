@@ -49,6 +49,12 @@
         pruneThresholdChars: 8192
         pruneHeadChars: 4096
         pruneTailChars: 1024
+        # When compaction cannot recover a wall hit either (its summarization
+        # failed and it left no usable surface change), take one last-resort trim
+        # instead of letting the turn die. Emergency means the head-protected nodes
+        # (the original task statement) may be elided too; the newest human
+        # instruction is still never crossed. At most one per overflow episode.
+        emergencyTrim: true
         # ── preset tuning (used by the `/trim preset` command) ──────────────
         # Fraction of each routed model's window at which the GENERATED preset
         # makes compaction fire. This only writes that preset's compaction-basic
