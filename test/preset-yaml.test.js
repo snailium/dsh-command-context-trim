@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MARKER_NAMESPACE, renderPresetRow, setEntryConfig, upsertMarkerBlock } from '../lib/preset-yaml.js';
+import {
+	MARKER_NAMESPACE,
+	extractPluginsFromPatch,
+	renderPresetRow,
+	renderRegistryRow,
+	setEntryConfig,
+	upsertMarkerBlock
+} from '../lib/preset-yaml.js';
 
 /**
  * A representative dump of a preset's plugin list — same shape as
@@ -148,4 +155,57 @@ test('upsertMarkerBlock appends once and then replaces in place', () => {
 	const intoEmpty = upsertMarkerBlock('', 'preset-x', '- insert: []');
 	assert.equal(intoEmpty.replaced, false);
 	assert.ok(intoEmpty.text.endsWith('\n'));
+});
+
+test('extractPluginsFromPatch pulls a shipped preset plugin list back to column 0', () => {
+	const shipped = [
+		'- insert:',
+		'    - id: preset-standard',
+		"      name: '@deepseek-ai/dsh-agent-preset'",
+		'      config:',
+		'        id: standard',
+		'        order: 1',
+		'        plugins:',
+		'          - id: persona',
+		"            name: '@deepseek-ai/dsh-persona'",
+		'          - id: compaction',
+		'            name: cordis:group',
+		'            config:',
+		'              - id: compaction-basic',
+		"                name: '@deepseek-ai/dsh-compaction-basic'",
+		''
+	].join('\n');
+	const plugins = extractPluginsFromPatch(shipped);
+	assert.equal(plugins, [
+		'- id: persona',
+		"  name: '@deepseek-ai/dsh-persona'",
+		'- id: compaction',
+		'  name: cordis:group',
+		'  config:',
+		'    - id: compaction-basic',
+		"      name: '@deepseek-ai/dsh-compaction-basic'",
+		''
+	].join('\n'));
+	assert.equal(setEntryConfig(plugins, 'compaction-basic', { thresholdRatio: 1, headroomTokens: 0, maxTokens: 8 }).includes('    thresholdRatio: 1'), true);
+	assert.equal(extractPluginsFromPatch('- id: persona\n'), null, 'a file without a plugins list is not a preset patch');
+});
+
+test('renderRegistryRow writes both required keys in either mode', () => {
+	assert.equal(
+		renderRegistryRow({ presetId: 'standard-tuned' }),
+		[
+			'- insert:',
+			'    - id: agent-preset-registry',
+			"      name: '@deepseek-ai/dsh-agent-preset-registry'",
+			'      config:',
+			'        default: standard-tuned',
+			'        selectedDefault: standard-tuned'
+		].join('\n')
+	);
+	assert.ok(renderRegistryRow({ presetId: 'x', mode: 'override' }).startsWith('- id: agent-preset-registry'));
+	assert.equal(renderRegistryRow({ presetId: 'x', mode: 'override' }).includes('insert'), false);
+	// `@` is a reserved YAML indicator, so a scoped package name must be quoted or the
+	// loader cannot parse the row at all.
+	assert.match(renderRegistryRow({ presetId: 'x' }), /name: '@deepseek-ai\/dsh-agent-preset-registry'/);
+	assert.match(renderPresetRow({ rowId: 'preset-x', presetId: 'x', name: 'n', description: 'd', order: 1, pluginsYaml: '- id: a\n' }), /name: '@deepseek-ai\/dsh-agent-preset'/);
 });

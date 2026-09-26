@@ -46,6 +46,16 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **Headless automation takes the profile plane, not a preset.** `scripts/make-preset-patch.mjs` turns a
+  route inventory into either a preset row plus `agent-preset-registry` default (the web/session-API route) or,
+  with `--mode host`, a row override for the profile's own `compaction-basic` — because a headless profile
+  composes compaction itself and never resolves a session preset. Verified in a clean `DSH_HOME`: three
+  headless runs (no overlay / generated preset / that preset with a tool row deleted) produced an identical
+  24-tool request surface, while the host-plane overlay lands the tuned config on the composed
+  `compaction-basic` row and a session under it exits 0.
+  `fixtures/headless-tuned-preset/` carries the route inventory, a mock provider patch, the drill script and
+  the notes on what cannot be asserted (the picker label is draft state; `agent-preset/selected` is absent
+  when a session is created with the default).
 - **The preset choice is per session, and locked once a session starts.** `agentPresets.select()` refuses with
   `agent-preset/locked` ("This session has already started") as soon as a turn is open or one has completed, because a
   switch recomposes the preset's isolate realm. The command's completion message now says so instead of pointing at the

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Minimal OpenAI-compatible mock for isolated dsh previews.
+"""Minimal OpenAI-compatible mock for isolated dsh previews and drills.
 
-Serves just enough for a preview instance to boot and answer: a model list and a
-streaming-free chat completion. It exists so `start-isolated-dsh.sh serve` has a
-provider to point at; a card render needs no model at all, so this mock only has to
-keep the route healthy.
+Serves just enough for an instance to boot and answer: a model list, and chat
+completions in both shapes a client may ask for — a single JSON body, or the SSE
+stream the provider protocol actually expects (`data:` chunks ending in
+`finish_reason` and `[DONE]`). Without the streaming shape a real run dies with
+"TRANSPORT: Stream ended without finish_reason".
 
     python3 test/compat/mock-llm.py 8901
 """
@@ -34,7 +35,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler API
         length = int(self.headers.get("content-length") or 0)
-        self.rfile.read(length)
+        raw = self.rfile.read(length)
+        try:
+            request = json.loads(raw or b"{}")
+        except ValueError:
+            request = {}
+        if request.get("stream") is True:
+            return self._stream()
         self._send(
             {
                 "id": "mock-completion",
@@ -44,6 +51,24 @@ class Handler(BaseHTTPRequestHandler):
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
             }
         )
+
+    def _stream(self):
+        """Emit the SSE shape the provider protocol requires."""
+        events = [
+            {"id": "mock-chunk", "object": "chat.completion.chunk", "model": MODEL,
+             "choices": [{"index": 0, "delta": {"role": "assistant", "content": "ok"}}]},
+            {"id": "mock-chunk", "object": "chat.completion.chunk", "model": MODEL,
+             "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}},
+        ]
+        body = "".join(f"data: {json.dumps(event)}\n\n" for event in events) + "data: [DONE]\n\n"
+        payload = body.encode()
+        self.send_response(200)
+        self.send_header("content-type", "text/event-stream")
+        self.send_header("cache-control", "no-cache")
+        self.send_header("content-length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def log_message(self, *_args):
         pass

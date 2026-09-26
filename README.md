@@ -323,6 +323,29 @@ Both keys are also editable in the GUI: **Plugins → Context trim** shows a car
 summarization route. Only fields marked `.volatile()` appear there, and a volatile field arrives at the plugin as a live
 handle, so every read goes through `readConfig` and an edit takes effect on the next invocation without a reload.
 
+## Automating a tuned threshold (headless runs)
+
+A **headless** profile composes compaction itself — its tree carries `compaction-basic`, `command-compact`
+and `tool-result-pruner` on the profile plane — and it never resolves a session **preset**; only the
+session API, the web client and the `agent-preset` row do. Measured in one clean `DSH_HOME`: with a
+generated preset plus `agent-preset-registry.selectedDefault`, and then with that preset's `tool-web` row
+deleted as a control, the first request carried the **same 24 tools** every time — the preset rows sat in
+the tree unused.
+
+So automated runs take the other route: write the tuning onto the profile's own compaction row.
+
+```bash
+node scripts/make-preset-patch.mjs --mode host --ratio 0.75 \
+  --routes fixtures/headless-tuned-preset/routes.json --out /tmp/host.yml
+DSH_HOME=$(mktemp -d) dsh --profile headless --patch /tmp/host.yml "do the task"
+```
+
+`fixtures/headless-tuned-preset/run-headless-check.sh` performs that drill against a fresh temporary home,
+asserts `--dump-config` carries the tuned config on `compaction-basic`, and runs one real session.
+Its README records what the drill does *not* assert, and why: the New Session picker label reflects a
+client/host draft rather than the default, and a session created with the default carries no
+`agent-preset/selected` event, so neither is usable as an automated assertion.
+
 ## Reading the session log
 
 `compaction/prune` has **two producers**, and only one of them is this plugin:

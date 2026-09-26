@@ -1,0 +1,3 @@
+[
+  { "provider": "mock", "model": "mock-model", "contextWindow": 65536, "maxTokens": 4096 }
+]

@@ -20,14 +20,14 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { planCompactionTuning } from '../lib/compaction-spec.js';
-import { renderPresetRow, setEntryConfig, upsertMarkerBlock } from '../lib/preset-yaml.js';
+import { extractPluginsFromPatch, renderPresetRow, setEntryConfig, upsertMarkerBlock } from '../lib/preset-yaml.js';
 
 const install = resolveInstall(process.argv[2]);
 const requireFromInstall = createRequire(join(install, 'node_modules'));
 const YAML = loadYaml(requireFromInstall);
 
 const presetFile = join(install, 'node_modules/@deepseek-ai/dsh-web-app/presets/standard.patch.yml');
-const base = extractPlugins(readFileSync(presetFile, 'utf8'));
+const base = extractPluginsFromPatch(readFileSync(presetFile, 'utf8'));
 if (base === null) fail(`could not find a plugins list in ${presetFile}`);
 
 const routes = [
@@ -113,26 +113,6 @@ function loadYaml(requireFrom) {
 		}
 	}
 	fail('no YAML parser found in the dsh installation (looked for yaml and js-yaml)');
-}
-
-/** Cut the `plugins:` sequence out of a shipped preset patch and dedent it to column 0. */
-function extractPlugins(text) {
-	const lines = text.split('\n');
-	const index = lines.findIndex((line) => /^ {8}plugins:\s*$/u.test(line));
-	if (index < 0) return null;
-	const body = [];
-	for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
-		const line = lines[cursor];
-		if (line.trim().length === 0) {
-			body.push('');
-			continue;
-		}
-		const indent = line.length - line.trimStart().length;
-		if (indent < 10) break;
-		body.push(line.slice(10));
-	}
-	while (body.length > 0 && body[body.length - 1].trim().length === 0) body.pop();
-	return `${body.join('\n')}\n`;
 }
 
 function assert(condition, message) {
