@@ -1,4 +1,10 @@
 /**
+ * A test fixture, not runtime code: it binds 127.0.0.1 and is never imported by the
+ * plugin. It lives in `fixtures/` rather than under `test/` for two reasons: `node --test`
+ * executes every JavaScript file under `test/` (a server there would hang the suite), and
+ * a repository-wide scan of *runtime* source should see only `lib/`, where the plugin's
+ * single file-system touch is the `/trim preset` patch write and nothing opens a socket,
+ * spawns a process or reads a credential.
  * Stateful mock OpenAI endpoint for the automatic-trim end-to-end check.
  *
  * It enforces a REAL context limit that is LOWER than the contextWindow the

@@ -46,6 +46,12 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- Store-facing metadata, added without changing the version: an explicit **Permissions and failure bounds** section in
+  the README (the runtime's only file-system touch is the `/trim preset` patch write; no network, no command execution,
+  no credential access), a `dsh.compatibility.dshReleases` map declaring exactly the harness lines this repository has
+  evidence for, and the overflow-check server moved from `scripts/` to `fixtures/` so a scan of *runtime* source sees
+  `lib/` only. That files capability is deliberate and cannot be removed: it *is* the preset generation. Under the
+  catalog's own model a legitimate plugin with file capability belongs in `user-reviewed`, not `source-verified`.
 - The generated row lands in the profile patch inside marker comments
   (`# >>> dsh-command-context-trim: preset-<id> … >>>`), so it is idempotent, reviewable and removable by deleting the
   block. One rolling backup (`cordis.patch.yml.bak-trim-preset`) is kept.

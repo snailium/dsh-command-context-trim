@@ -6,3 +6,4 @@ node_modules/
 .settings-preview-017/
 .dsh-isolated-*/
 test/compat/__pycache__/
+.third-party-audit/

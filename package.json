@@ -31,7 +31,7 @@
     "test": "node --test",
     "link:harness": "bash scripts/dev-link-harness.sh",
     "prepublishOnly": "npm test",
-    "e2e:mock": "node scripts/mock-overflow-server.mjs"
+    "e2e:mock": "node fixtures/mock-overflow-server.mjs"
   },
   "dsh": {
     "bundle": {
@@ -39,6 +39,14 @@
     },
     "client": {
       "platform": "web"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.2-rc.1": "compatible",
+        "0.1.5-rc.2": "compatible",
+        "0.1.5-rc.3": "compatible",
+        "0.1.7-rc.2": "compatible"
+      }
     }
   },
   "peerDependencies": {
