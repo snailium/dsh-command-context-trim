@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import z from '@deepseek-ai/schemastery';
 import { Config } from '../lib/index.js';
 import { readConfig, resolveConfig } from '../lib/config.js';
 
@@ -19,7 +20,16 @@ function volatileFields(schema) {
 		.sort();
 }
 
+/** `.volatile()` needs schemastery 3.18.4; older harnesses (0.1.5 and earlier) lack it. */
+const supportsVolatile = typeof z.number().volatile === 'function';
+
 test('exactly the two tuning fields are volatile, so the card shows exactly those', () => {
+	if (!supportsVolatile) {
+		// The whole point of the probe: an older host keeps plain fields so the plugin
+		// still imports, and its web host has no card services either.
+		assert.deepEqual(volatileFields(Config), [], 'a harness without .volatile() must not break the import');
+		return;
+	}
 	assert.deepEqual(volatileFields(Config), ['compactionRoute', 'compactionTargetRatio']);
 	const json = Config.toJSON();
 	const route = json.refs[json.refs[json.uid].dict.compactionRoute.uid ?? json.refs[json.uid].dict.compactionRoute];
@@ -47,9 +57,12 @@ test('the client half is declared and points at a file that ships', () => {
 	assert.equal(manifest.exports['./client'].default, './lib/client.js');
 	assert.ok(manifest.files.includes('lib'), 'the client file must ship');
 	assert.equal(manifest.dsh.client.platform, 'web');
-	for (const service of ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager']) {
-		assert.ok(manifest.dsh.client.inject.includes(service), `${service} must load before the card`);
-	}
+	// No version-specific package names: a 0.1.5 web host has none of the 0.1.7 client
+	// packages, and asking for them would fail that host's whole page. The real
+	// requirement is the browser-side service list (`inject` in lib/client.js), which
+	// cordis gates for us.
+	assert.equal(manifest.dsh.client.inject, undefined);
+	assert.match(clientSource, /const inject = \['slots', 'locale', 'configForms'\]/u);
 });
 
 test('the client entry id matches the loader row id, which is what the page keys on', () => {
