@@ -67,7 +67,10 @@ All notable changes to this project are documented here. This project adheres to
   `dsh headless "task"` needs.
 - **`DSH_TRIM_AUTO_TUNE` turns auto tuning on (or off) from the environment**, overriding the profile's own
   setting: `1/true/yes/on` and `0/false/no/off` are accepted, an empty value means unset, anything else fails
-  loudly at load. Verified live with no switch in any patch at all — `DSH_TRIM_AUTO_TUNE=1` plus a task that
+  loudly at load. This is an **automation/CI switch** — it exists so a container or a harness can enable the
+  behaviour without editing a profile. Normal web and production profiles should configure `autoTuneCompaction`
+  through the settings card or a patch layer instead: the variable overrides that setting, and in a web profile a
+  runtime retune has nowhere to land in any case. Verified live with no switch in any patch at all — `DSH_TRIM_AUTO_TUNE=1` plus a task that
   used no tool and never went idle still landed the tuned `compaction-basic` row in the profile patch. The
   README's permission table now states this one environment read explicitly.
 - **Auto tune now works in one-shot headless runs.** The triggers are `agent/created`, **every
