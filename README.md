@@ -343,13 +343,15 @@ write is skipped when nothing changes, and it is refused with an explanation whe
 is empty from the host plane), and a session's preset cannot change once it has started — tune the preset
 there instead (see `/trim preset`).
 
-Because the row restarts on write, an in-flight compaction is cancelled, so the automatic form does its
-write while the agent is **idle**. `autoTuneCompaction: true` (off by default) recomputes whenever the
-surface's system prompt is inserted — the moment a session's route can have changed, e.g. a
-mid-conversation model switch — and writes the result at the next idle. Nothing is written when the
-computed config already matches, so a per-request re-check costs no restarts. A one-shot
-`dsh headless "task"` may finish before that write; the value still lands in the profile patch for later
-boots, which is the route the boot overlay takes directly.
+`autoTuneCompaction: true` (off by default) does that automatically, on whichever of these fires first:
+the agent's creation (`agent/created`, which carries the agent), **every request** before it is sent
+(`agent/request` — so a model switch mid-conversation is corrected before the request that would use it),
+the insertion of the surface's system prompt, and an idle moment in a long-lived profile. The write is
+immediate and intentionally not awaited: a one-shot `dsh headless "task"` never reaches an idle moment, and
+that is exactly where automated sessions live. It is safe early — the first trigger fires before anything
+can be compacting — and idempotent, so an unchanged route writes nothing and a per-request re-check costs
+no restarts. A write does restart the compaction row, so a *later* write can cancel a compaction that is in
+flight; that is the one trade-off, and the log says so.
 
 ## Automating a tuned threshold (headless runs)
 

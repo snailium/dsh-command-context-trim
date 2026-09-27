@@ -114,40 +114,48 @@ test('an already-tuned row is left alone, and failures stay actionable', async (
 	assert.match(presetPlane.result.text, /tune the preset instead/u);
 });
 
-test('auto tune checks when the system prompt is inserted and writes when idle', async () => {
+test('auto tune writes immediately, without waiting for an idle moment', async () => {
 	const off = stubContext();
 	registerAutoTune(off, { autoTuneCompaction: false });
-	assert.equal(off.listeners.has('agent/status'), false, 'switched off means no listener at all');
-	assert.equal(off.listeners.has('session/event'), false);
+	assert.equal(off.listeners.has('agent/created'), false, 'switched off means no listener at all');
 
 	const on = stubContext();
-	registerAutoTune(on, { autoTuneCompaction: true });
-	assert.equal(on.listeners.has('session/event'), true);
-	assert.equal(on.listeners.has('agent/status'), true);
-	const onStatus = on.listeners.get('agent/status');
-	const onEvent = on.listeners.get('session/event');
+	const auto = registerAutoTune(on, { autoTuneCompaction: true });
+	assert.deepEqual([...on.listeners.keys()].sort(), ['agent/created', 'agent/request', 'agent/status', 'session/event']);
 
-	await onStatus({ agent, status: 'working' });
-	assert.equal(on.edits.length, 0, 'never while a turn is running');
-	await onEvent({}, { type: 'system/message' });
-	await onStatus({ agent, status: 'idle' });
-	assert.equal(on.edits.length, 1, 'the insertion is what gets the tuning computed');
+	// A one-shot headless run may never be idle: the agent's creation must already tune.
+	await on.listeners.get('agent/created')({ agent });
+	assert.equal(on.edits.length, 1, 'tuned at agent creation, no idle needed');
 	assert.equal(on.edits[0].next.thresholdRatio, 0.8);
 
-	// A second insertion re-checks; nothing changes, so nothing is written (no restart churn).
-	await onEvent({}, { type: 'system/message' });
-	await onStatus({ agent, status: 'idle' });
-	assert.equal(on.edits.length, 1, 'an unchanged route writes nothing');
+	// A second trigger with an unchanged route writes nothing (no restart churn).
+	await on.listeners.get('agent/status')({ agent, status: 'idle' });
+	assert.equal(on.edits.length, 1);
 
-	// But a changed route does get written, which is the point of re-checking per request.
+	// A mid-session model switch is caught before the request that would use it, and the
+	// waterfall still hands the decision on.
+	let continued = false;
 	on.edits.length = 0;
 	CATALOG.lc['/models/q.gguf'] = { contextWindow: 40960, defaultMaxTokens: 8192 };
 	try {
-		await onEvent({}, { type: 'system/message' });
-		await onStatus({ agent, status: 'idle' });
-		assert.equal(on.edits.length, 1, 'a mid-session model switch is picked up');
-		assert.equal(on.edits[0].next.modelPolicies[0].contextWindow, undefined, 'policy carries the headroom, not the window');
+		on.listeners.get('agent/request')({ agent }, () => {
+			continued = true;
+			return 'downstream';
+		});
+		await auto.pending();
+		assert.equal(continued, true, 'a listener must never veto the request waterfall');
+		assert.equal(on.edits.length, 1, 'the switch is picked up');
 		assert.notEqual(on.edits[0].next.modelPolicies[0].headroomTokens, 9012, 'the headroom follows the new window');
+	} finally {
+		CATALOG.lc['/models/q.gguf'] = { contextWindow: 131072, defaultMaxTokens: 16384 };
+	}
+
+	// The system-prompt insertion is the other signal, and it reuses the agent it has seen.
+	on.edits.length = 0;
+	CATALOG.lc['/models/q.gguf'] = { contextWindow: 8192, defaultMaxTokens: 1024 };
+	try {
+		await on.listeners.get('session/event')({}, { type: 'system/message' });
+		assert.equal(on.edits.length, 1, 'a prompt insertion also triggers a re-check');
 	} finally {
 		CATALOG.lc['/models/q.gguf'] = { contextWindow: 131072, defaultMaxTokens: 16384 };
 	}

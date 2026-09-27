@@ -46,6 +46,12 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **Auto tune now works in one-shot headless runs.** The triggers are `agent/created`, **every
+  `agent/request` before it is sent**, the system-prompt insertion and (for long-lived profiles) an idle
+  moment; the write happens immediately and is not awaited, because a `dsh headless "task"` process never
+  reaches an idle moment. Verified live with a task that used no tool and never went idle at all
+  (`step/start` → `system/message` → `turn/end`): the tuned `compaction-basic` row still landed in the
+  profile patch. The request waterfall is handed on untouched, and an unchanged route writes nothing.
 - **Auto tune re-checks per request.** `autoTuneCompaction` now recomputes the tuning whenever the surface's
   system prompt is inserted — the moment a session's route can have changed, such as a mid-conversation model
   switch — and performs the write at the next idle, because a restarted row cancels work in progress. It
