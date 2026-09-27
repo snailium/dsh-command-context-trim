@@ -99,6 +99,21 @@ On headless/tui the profile-plane path (`autoTuneCompaction`, `prunerThresholdCh
 because there `dsh-base` inserts both rows into the profile and a patch layer retunes them on every boot. Prefer
 that plane where it exists; the preset route is the web-shaped exception.
 
+### Which route to use
+
+Both routes can set every compaction setting — thresholds, the pruner, **and** the summarizer
+(`summarizationProvider` / `summarizationModel` are ordinary keys on `compaction-basic`, per route via
+`modelPolicies` entries). Reach for the profile plane first, because it is retunable on every boot and carries no
+lock.
+
+| You want to | Use | Why |
+|---|---|---|
+| retune thresholds or the pruner (headless, tui) | `autoTuneCompaction`, the settings card, or a patch layer | applied at boot or live; nothing persists that can break |
+| pick the summarizer (headless, tui) | the profile plane (`summarizationProvider` / `summarizationModel`, or `modelPolicies` per route) | ordinary config keys — no preset needed |
+| do either one in **web** | `/trim preset` | the web host plane disables both rows, so nothing else can reach them |
+| a different config per session or task | `/trim preset` | presets are per session; the profile is per profile |
+| change a session that already started | start a **new** session | locked at the first turn, and a fork inherits the lock |
+
 ## Install
 
 ```bash
