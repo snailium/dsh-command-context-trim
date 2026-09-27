@@ -60,6 +60,10 @@
         # is composed on the profile plane (headless/tui); a web profile keeps it inside each
         # session's preset, so there the plugin refuses and explains instead.
         autoTuneCompaction: false
+        # Off by default: a route whose stock profile has no pressure trigger is left that way, because
+        # enabling one there only adds compaction events (measured: 15 -> 24 on one task). Set true to tune
+        # those routes anyway; see the README's "When it does not pay".
+        tuneStockDisabledRoutes: false
         # ── preset tuning (used by the `/trim preset` command) ──────────────
         # Fraction of each routed model's window at which the GENERATED preset
         # makes compaction fire. This only writes that preset's compaction-basic

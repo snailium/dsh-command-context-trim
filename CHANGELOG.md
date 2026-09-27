@@ -46,6 +46,13 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **Routes whose stock profile has no pressure trigger are now left that way by default.** Field data showed that
+  enabling a trigger there does not move an existing compaction, it creates one on every crossing (15 → 24 events on
+  a single task, against a local summarizer that blocks the turn for 209–372 s per call). The planner therefore
+  writes such a route a policy with dsh's stock 65536 headroom — the pressure budget stays negative and the trigger
+  stays disabled — and prints why, leaving dsh's overflow path and the model-free `/trim` to handle the wall.
+  Enabling it is now explicit: `--include-stock-disabled-routes` on `scripts/make-preset-patch.mjs`, or
+  `tuneStockDisabledRoutes: true` for `/trim tune` (the manual `/trim preset` path takes the same config key).
 - **The tuning is a per-backend decision, and the docs now say when it does not pay.** Measured by the backend-test
   session on 2026-09-27, Bonsai 2 @ RTX 5060 8GB (40960 / 8192), same task and single route, tuning confirmed
   applied: compaction events went **15 → 24** with the 80 % trigger on, and each event is a model call that blocks

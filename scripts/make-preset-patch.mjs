@@ -40,6 +40,9 @@ const USAGE = `usage: make-preset-patch.mjs --base <preset.patch.yml|plugins.yml
   --context-window <n> FALLBACK window, used only when no route could be read
   --max-tokens <n>     FALLBACK output reserve for that same route (default: 0)
   --model <p:m>        name the fallback route; without it no per-route policy can be emitted
+  --include-stock-disabled-routes
+                              enable a pressure trigger even on routes whose stock profile has none
+                              (default: keep them at stock; see the caution in the output)
   --window-agnostic    deliberately tune the ratio alone, needing no window at all
   --summarizer-max-tokens <n>  cap for the compaction call itself (default: 8192)
   --route <p:m>        summarization route for the compaction call
@@ -81,7 +84,12 @@ try {
 // dsh's 65536 default) decide. With a window override in hand the achievable trigger is
 // reported for that window, so the operator can see what the numbers mean.
 const plan = resolved.routes.length > 0
-	? planCompactionTuning({ routes: resolved.routes, targetRatio, summarizationRoute })
+	? planCompactionTuning({
+			routes: resolved.routes,
+			targetRatio,
+			summarizationRoute,
+			includeStockDisabled: args['include-stock-disabled-routes'] === true
+		})
 	: {
 			config: {
 				thresholdRatio: targetRatio,
@@ -134,7 +142,7 @@ function parseArgs(argv) {
 			process.exit(0);
 		}
 		const key = arg.replace(/^--/u, '');
-		if (key === 'window-agnostic') {
+		if (key === 'window-agnostic' || key === 'include-stock-disabled-routes') {
 			out[key] = true;
 			continue;
 		}

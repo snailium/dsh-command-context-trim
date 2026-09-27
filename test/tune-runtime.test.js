@@ -142,7 +142,7 @@ test('auto tune writes immediately, without waiting for an idle moment', async (
 	// waterfall still hands the decision on.
 	let continued = false;
 	on.edits.length = 0;
-	CATALOG.lc['/models/q.gguf'] = { contextWindow: 40960, defaultMaxTokens: 8192 };
+	CATALOG.lc['/models/q.gguf'] = { contextWindow: 200000, defaultMaxTokens: 8192 };
 	try {
 		on.listeners.get('agent/request')({ agent }, () => {
 			continued = true;
@@ -158,7 +158,7 @@ test('auto tune writes immediately, without waiting for an idle moment', async (
 
 	// A model switch is announced on the session, which is resolved to its agent rather than guessed.
 	on.edits.length = 0;
-	CATALOG.lc['/models/q.gguf'] = { contextWindow: 8192, defaultMaxTokens: 1024 };
+	CATALOG.lc['/models/q.gguf'] = { contextWindow: 300000, defaultMaxTokens: 8192 };
 	try {
 		await on.listeners.get('session/event')(agent.session, { type: 'model/selection' });
 		assert.equal(on.edits.length, 1, 'a model switch is picked up without waiting for a request');
