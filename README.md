@@ -236,6 +236,16 @@ tail is a hard boundary and the final message is never dropped.
 
 ## Compatibility
 
+**Marker provenance under session format v4.** The replacement message carries the source kind
+`plugin:dsh-command-context-trim` — the `plugin:<plugin id>` shape v4 requires — because 0.1.7's admission path
+refuses the retired `{kind: 'plugin'}` wrapper with `format v4 message requires a producer-owned source kind`.
+Markers written before 0.3.1 are still recognised by this plugin, and dsh rewrites them when it upgrades a v3
+session. Re-check the shape against an installed dsh any time (a dsh upgrade could change the rule):
+
+```bash
+node scripts/check-session-marker.mjs --prefix <dir with node_modules/@deepseek-ai>
+```
+
 One host half loads on every supported harness line; two features are scoped to the line that introduced the plane they
 need. Verified state, by feature:
 

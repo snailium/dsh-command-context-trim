@@ -5,6 +5,23 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-27
+
+### Fixed
+
+- **A trim made the session unreadable on dsh 0.1.7.** Session format v4 retired the generic
+  `{kind: 'plugin', plugin: …}` source wrapper: its admission path fails with
+  `format v4 message requires a producer-owned source kind`, while dsh's own v3-to-v4 converter derives
+  exactly `plugin:<plugin id>` for a third-party producer. The replacement message now carries
+  `plugin:dsh-command-context-trim`; `isTrimMarkerSource` still recognises markers written by earlier
+  versions, so an old marker in an existing session stays ours instead of looking like user text. Checking
+  it took the real validator rather than a stand-in — `scripts/check-session-marker.mjs --prefix <dsh install>`
+  reports the new kind as ACCEPTED and the retired wrapper as REJECTED — because the rule lives in dsh, not
+  here, which is why 127 green unit tests could not see the bug.
+- Upgrade before relying on a session that contains a trim and was written by 0.3.0 or any 0.2.x under
+  0.1.7. Sessions still in format v3 are converted correctly by dsh itself.
+
+
 ## [0.3.0] - 2026-09-26
 
 ### Added

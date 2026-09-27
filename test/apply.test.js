@@ -61,6 +61,18 @@ test('appends a prune claim then a replacement shadowing the span', () => {
 	assert.equal(Object.keys(replacement.surfaceOp).length, 3, 'the marker must carry exactly op/start/end keys');
 	assert.deepEqual([...replacement.sourceEventSeqs].sort((a, b) => a - b), [...plan.shadowedSeqs]);
 	assert.equal(isTrimMarkerSource(replacement.data.source), true);
+	// Session format v4 refuses the retired `{kind: 'plugin'}` wrapper on admission, so the marker must
+	// carry the producer-owned kind dsh itself derives for a third-party plugin.
+	assert.equal(replacement.data.source.kind, 'plugin:dsh-command-context-trim');
+	assert.notEqual(replacement.data.source.kind, 'plugin');
+	assert.equal(
+		isTrimMarkerSource({ kind: 'plugin', plugin: 'dsh-command-context-trim' }),
+		true,
+		'a marker written by an older version is still ours'
+	);
+	assert.equal(isTrimMarkerSource({ kind: 'plugin', plugin: 'someone-else' }), false);
+	assert.equal(isTrimMarkerSource({ kind: 'plugin:someone-else' }), false);
+	assert.equal(isTrimMarkerSource(undefined), false);
 	assert.match(replacement.data.content[0].text, /^\[context-trim\] 4 earlier messages/);
 	assert.deepEqual(session.surface.nodes, [...before.slice(0, 1), replacement.seq, ...before.slice(5)]);
 });
