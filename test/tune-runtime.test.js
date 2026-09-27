@@ -168,3 +168,34 @@ test('the shipped patch documents the switch as off', () => {
 	const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
 	assert.match(patch, /autoTuneCompaction: false/u);
 });
+
+test('a retune is reported on stderr, and a no-op check is not', async () => {
+	const written = [];
+	const original = process.stderr.write.bind(process.stderr);
+	process.stderr.write = (chunk, ...rest) => {
+		written.push(String(chunk));
+		return original(chunk, ...rest);
+	};
+	try {
+		const ctx = stubContext();
+		registerAutoTune(ctx, { autoTuneCompaction: true });
+		const auto = registerAutoTune(stubContext(), { autoTuneCompaction: true });
+
+		const fresh = stubContext();
+		const handle = registerAutoTune(fresh, { autoTuneCompaction: true });
+		await handle.pending();
+		// First flush happens through agent/created in the other stubs; here check the no-op path.
+		await fresh.listeners.get('agent/created')({ agent });
+		assert.equal(fresh.edits.length, 1, 'the first trigger writes');
+		assert.equal(written.some((line) => line.includes('Retuned compaction-basic')), true, `expected a stderr line, got ${JSON.stringify(written)}`);
+
+		written.length = 0;
+		await fresh.listeners.get('agent/created')({ agent });
+		assert.equal(fresh.edits.length, 1, 'nothing changed');
+		assert.equal(written.length, 0, 'an unchanged per-request check must stay silent');
+		void ctx;
+		void auto;
+	} finally {
+		process.stderr.write = original;
+	}
+});

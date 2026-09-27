@@ -46,6 +46,13 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **Auto tune reports without touching the conversation.** A retune now prints exactly one line on stderr
+  (`context-trim: auto compaction tune: Retuned compaction-basic (…)`) besides logging it, because the cordis
+  logger only reaches a user where a profile wires an exporter and a headless profile does not — previously the
+  report was written but visible nowhere, and the line it logged was the report's *heading* rather than its
+  outcome. A re-check that finds nothing new stays silent, so the per-request trigger does not spam a container's
+  logs, and nothing is ever added to the session: the model's context and the token bill are untouched.
+  Verified live: a `DSH_TRIM_AUTO_TUNE=1` one-shot run printed the retune line and answered `ok`.
 - **Trigger set reviewed, not accumulated.** Auto tune fires on `agent/created`, on every `agent/request`
   before it is sent, on a session's `model/selection`, and on an idle moment. The system-prompt insertion was
   dropped: it is committed even earlier in the same step (the surface is built before the request hook), so it

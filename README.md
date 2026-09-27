@@ -250,6 +250,7 @@ What the plugin touches, stated so a reviewer does not have to infer it:
 | Command | no | No child process, no shell, no `exec`/`spawn`. |
 | Credentials | no | No key, token or credential is read, logged or forwarded. Provider credentials stay with the `llm-pi-ai` row. The runtime reads exactly **one** environment variable, `DSH_TRIM_AUTO_TUNE`, as an opt-in boolean feature flag. |
 | Protected DSH behaviour | no | It never disables, replaces or shadows an official component. A generated preset is a **clone** of the preset in use with only the compaction group's config replaced — a new preset id, the original left untouched. |
+| Diagnostics | one stderr line per retune or failure | The cordis logger only reaches a user when a profile wires an exporter (a headless profile does not), so a retune — rare, and a behaviour change — also prints one line to stderr: nothing per request, and never anything in the model's context. |
 | Test fixtures | `fixtures/`, not shipped | `fixtures/mock-overflow-server.mjs` and `test/compat/mock-llm.py` bind 127.0.0.1 for tests only. They are outside `lib/`, are never loaded at runtime, and are excluded from the published `files` list. |
 
 Failure bounds:
