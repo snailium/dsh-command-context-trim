@@ -239,3 +239,30 @@ test('an applied retune is recorded as a non-surface session event', async () =>
 	assert.equal(again.result.kind, 'success');
 	assert.equal(untouched.appended.length, 0, 'an unchanged row writes no record');
 });
+
+test('a repeated identical failure is reported once, not once per request', async () => {
+	const written = [];
+	const original = process.stderr.write.bind(process.stderr);
+	process.stderr.write = (chunk, ...rest) => {
+		written.push(String(chunk));
+		return original(chunk, ...rest);
+	};
+	try {
+		// A web-like context: the guard refuses every time, and agent/request triggers every time.
+		const ctx = stubContext({ plane: 'preset' });
+		const auto = registerAutoTune(ctx, { autoTuneCompaction: true });
+		const next = () => 'downstream';
+		for (let i = 0; i < 4; i += 1) ctx.listeners.get('agent/request')({ agent }, next);
+		await auto.pending();
+		const lines = written.filter((line) => line.includes('agent-preset isolate realm'));
+		assert.equal(lines.length, 1, `expected one report, got ${lines.length}`);
+
+		// A later success clears the memory, so a subsequent failure would be reported again.
+		const healthy = stubContext();
+		registerAutoTune(healthy, { autoTuneCompaction: true });
+		await healthy.listeners.get('agent/created')({ agent });
+		assert.equal(healthy.edits.length, 1, 'a healthy context still tunes (and writes)');
+	} finally {
+		process.stderr.write = original;
+	}
+});

@@ -364,7 +364,8 @@ profile's own `autoTuneCompaction`. It exists so a container, a CI harness or a 
 behaviour without editing a profile. A normal **web or production profile should not set it**: the override would
 silently win over the profile's setting, and in a web profile a runtime retune has nowhere to land anyway —
 compaction there lives inside each session's agent-preset isolate realm. Configure a real profile through its
-settings card, or through a patch layer, instead.
+settings card, or through a patch layer, instead. (A refusal like that is reported once, not once per request,
+so a stray variable in the wrong environment cannot flood a service log.)
 
 ## Automating a tuned threshold (headless runs)
 

@@ -46,6 +46,11 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **A repeated refusal is reported once.** The guard against a plane it cannot reach (a web profile's preset
+  realm, say) fails identically on every trigger, and the per-request trigger would have turned that into a
+  stderr and logger line per request — which a stray `DSH_TRIM_AUTO_TUNE` in a service environment would have
+  made very visible. An unchanged failure is now reported once and logged at debug; a later success clears the
+  memory, so a recovery is reported too.
 - **A retune is recorded in the session log for analysis.** Every applied retune appends one non-surface
   `context-trim/tuned` event carrying the settings written, the keys that changed, the capacity the adapter
   actually reported per route, and the per-route policies. It is not a surface message, so it never enters the
