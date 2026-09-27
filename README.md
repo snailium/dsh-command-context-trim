@@ -343,10 +343,13 @@ write is skipped when nothing changes, and it is refused with an explanation whe
 is empty from the host plane), and a session's preset cannot change once it has started — tune the preset
 there instead (see `/trim preset`).
 
-Because the row restarts on write, an in-flight compaction is cancelled; run `/trim tune` between turns,
-which is also what `autoTuneCompaction: true` does — it retunes once per process, the first time the agent
-goes idle (off by default; a one-shot `dsh headless "task"` may finish before it fires, and that is fine,
-because the value is persisted in the profile patch for later boots).
+Because the row restarts on write, an in-flight compaction is cancelled, so the automatic form does its
+write while the agent is **idle**. `autoTuneCompaction: true` (off by default) recomputes whenever the
+surface's system prompt is inserted — the moment a session's route can have changed, e.g. a
+mid-conversation model switch — and writes the result at the next idle. Nothing is written when the
+computed config already matches, so a per-request re-check costs no restarts. A one-shot
+`dsh headless "task"` may finish before that write; the value still lands in the profile patch for later
+boots, which is the route the boot overlay takes directly.
 
 ## Automating a tuned threshold (headless runs)
 

@@ -23,7 +23,11 @@ function stubContext(request = {}) {
 					entries: () => [request.withoutRow === true ? undefined : row, { options: { id: 'llm-pi-ai', config: { providers: { lc: { models: [{ id: '/models/q.gguf' }] } } } } }].filter(Boolean),
 					edit: async (entry, change) => {
 						if (request.editFails === true) throw new Error('the document moved under the draft');
-						edits.push({ id: entry.options.id, next: change(entry.options.config ?? {}, {}) });
+						const next = change(entry.options.config ?? {}, {});
+						// The real editor applies the change to the entry, so a later comparison sees
+						// the new state; without that the stub would "write" the same thing forever.
+						entry.options.config = next;
+						edits.push({ id: entry.options.id, next });
 					}
 				};
 			}
@@ -110,20 +114,43 @@ test('an already-tuned row is left alone, and failures stay actionable', async (
 	assert.match(presetPlane.result.text, /tune the preset instead/u);
 });
 
-test('auto tune fires once per process, only when switched on', async () => {
+test('auto tune checks when the system prompt is inserted and writes when idle', async () => {
 	const off = stubContext();
 	registerAutoTune(off, { autoTuneCompaction: false });
 	assert.equal(off.listeners.has('agent/status'), false, 'switched off means no listener at all');
+	assert.equal(off.listeners.has('session/event'), false);
 
 	const on = stubContext();
 	registerAutoTune(on, { autoTuneCompaction: true });
+	assert.equal(on.listeners.has('session/event'), true);
 	assert.equal(on.listeners.has('agent/status'), true);
-	await on.listeners.get('agent/status')({ agent, status: 'working' });
-	assert.equal(on.edits.length, 0, 'not while a turn is running');
-	await on.listeners.get('agent/status')({ agent, status: 'idle' });
-	assert.equal(on.edits.length, 1);
-	await on.listeners.get('agent/status')({ agent, status: 'idle' });
-	assert.equal(on.edits.length, 1, 'once per process: a restart storm would cancel in-flight work');
+	const onStatus = on.listeners.get('agent/status');
+	const onEvent = on.listeners.get('session/event');
+
+	await onStatus({ agent, status: 'working' });
+	assert.equal(on.edits.length, 0, 'never while a turn is running');
+	await onEvent({}, { type: 'system/message' });
+	await onStatus({ agent, status: 'idle' });
+	assert.equal(on.edits.length, 1, 'the insertion is what gets the tuning computed');
+	assert.equal(on.edits[0].next.thresholdRatio, 0.8);
+
+	// A second insertion re-checks; nothing changes, so nothing is written (no restart churn).
+	await onEvent({}, { type: 'system/message' });
+	await onStatus({ agent, status: 'idle' });
+	assert.equal(on.edits.length, 1, 'an unchanged route writes nothing');
+
+	// But a changed route does get written, which is the point of re-checking per request.
+	on.edits.length = 0;
+	CATALOG.lc['/models/q.gguf'] = { contextWindow: 40960, defaultMaxTokens: 8192 };
+	try {
+		await onEvent({}, { type: 'system/message' });
+		await onStatus({ agent, status: 'idle' });
+		assert.equal(on.edits.length, 1, 'a mid-session model switch is picked up');
+		assert.equal(on.edits[0].next.modelPolicies[0].contextWindow, undefined, 'policy carries the headroom, not the window');
+		assert.notEqual(on.edits[0].next.modelPolicies[0].headroomTokens, 9012, 'the headroom follows the new window');
+	} finally {
+		CATALOG.lc['/models/q.gguf'] = { contextWindow: 131072, defaultMaxTokens: 16384 };
+	}
 });
 
 test('the shipped patch documents the switch as off', () => {

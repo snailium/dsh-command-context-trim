@@ -46,6 +46,12 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **Auto tune re-checks per request.** `autoTuneCompaction` now recomputes the tuning whenever the surface's
+  system prompt is inserted — the moment a session's route can have changed, such as a mid-conversation model
+  switch — and performs the write at the next idle, because a restarted row cancels work in progress. It
+  previously ran once per process, which missed exactly that case. An unchanged result writes nothing, so the
+  re-check adds no restart churn. Re-verified live in a fresh headless home after the change: the session
+  answered and the tuned `compaction-basic` row again landed in the profile patch.
 - **Auto tune verified end to end.** In a fresh isolated `DSH_HOME` with the plugin installed as a bundle and
   `autoTuneCompaction: true`, a headless session discovered the route through the adapter, computed the per-route
   headroom and wrote the tuned `compaction-basic` row into the profile patch **while the session ran** (observed row:
