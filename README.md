@@ -31,9 +31,8 @@ route that barely matters. On a local card it decides everything:
 
 | route | W | R | dsh default trigger | tuned (`headroomTokens: 0`, `r = 0.8`) | usable context |
 |---|---:|---:|---:|---:|---|
-| `b70-sycl` / `xtx-vulkan` / `b70-smg` | 131072 | 16384 | 49152 — **37.5 %** | 104857 — **80.0 %** | **+55705 tokens, 2.1×** |
-| `bonsai-8gb` | 40960 | 8192 | *no pressure path at all* (the route cannot compact early) | 32768 — 80.0 % | a route that could not compact proactively now can |
-| Bonsai2 at 40960 / 16384 | 40960 | 16384 | *no pressure path at all* | 24576 — 60.0 % (its ceiling) | +24576 usable tokens |
+| `Qwen3.8:27b @ Intel Arc B70` | 131072 | 16384 | 49152 — **37.5 %** | 104857 — **80.0 %** | **+55705 tokens, 2.1×** |
+| `Bonsai 2 @ RTX 5060 8GB` | 40960 | 8192 | *no pressure path at all* (the route cannot compact early) | 32768 — 80.0 % | a route that could not compact proactively now can |
 | `deepseek-official` (cloud) | 1000000 | 256000 | 678464 — 67.8 % | 744000 — 74.4 % | barely moves — tuning matters where the window is small |
 
 Three consequences, in the order they matter:
@@ -48,8 +47,8 @@ Three consequences, in the order they matter:
    `CONTEXT_WINDOW_EXCEEDED` (`emergencyTrim`), so the wall does not end the turn.
 
 Two honest limits. Where the route's own reserve is larger than `(1 − r) × W`, the ratio is *unreachable by
-construction* — `ovms` (81920/65536), `opencode-go`, and a 16384-reserve Bonsai2 are capped at 20 %, 61.6 % and 60 %
-respectively; the tuner moves those to their real ceiling rather than pretending. And the tuning applies where
+construction* — `ovms` (81920/65536) and `opencode-go` are capped at 20 % and 61.6 % respectively; the tuner
+moves those to their real ceiling rather than pretending. And the tuning applies where
 compaction is composed on the profile plane (headless, tui); a web profile keeps compaction inside each session's
 agent-preset realm, where a runtime write cannot reach a running session — see *Retuning the live process* below.
 
