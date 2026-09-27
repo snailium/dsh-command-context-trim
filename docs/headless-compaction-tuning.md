@@ -183,9 +183,39 @@ where a runtime change matters, and there it works like this:
   agent-preset isolate realm, so a host-plane write cannot reach a running session, and a session's preset
   is locked once it starts.
 
-Not verified live: the *behavioural* effect (a real overflow firing at the new fraction after a runtime
-write). The mechanism is source-verified and the write path is the one the settings cards use, which was
-watched working on a live profile patch.
+### A live check that the runtime write really lands
+
+```bash
+# the plugin has to be in the profile as a bundle, so its row is composed
+npm --prefix "$DSH_HOME/profiles/headless" install /path/to/dsh-command-context-trim
+cat > /tmp/tune-on.yml <<'YAML'
+- id: context-trim
+  name: dsh-command-context-trim
+  config: { autoTuneCompaction: true, compactionTargetRatio: 0.8 }
+YAML
+DSH_HOME=$DSH_HOME dsh --profile headless --patch /tmp/tune-on.yml \
+  "Use the bash tool to run: echo hi. Then reply with the single word done."
+grep -A10 '^- id: compaction-basic' "$DSH_HOME/profiles/headless/cordis.patch.yml"
+```
+
+Observed on 0.1.7-rc.2 in a fresh home with a mock backend declaring 65536/4096: the session answered, the
+plugin activated, and the profile patch gained the row below **while the session was running** — the plugin
+asked the adapter for the route, computed the per-route headroom (`(W − R) − floor(r·W) = 61440 − 52428`),
+and persisted it:
+
+```yaml
+- id: compaction-basic
+  config:
+    thresholdRatio: 0.8
+    headroomTokens: 0
+    maxTokens: 8192
+    modelPolicies:
+      - { provider: mock, model: mock-model, thresholdRatio: 0.8, headroomTokens: 9012 }
+```
+
+Still not verified live: the *timing* consequence — a real overflow in a long conversation firing at the new
+fraction after such a write. The mechanism is source-verified (a config write restarts the fiber) and the
+write path is the one the settings cards use.
 
 ## 7b. If you also want the plugin's own trimming in those sessions
 

@@ -46,6 +46,11 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **Auto tune verified end to end.** In a fresh isolated `DSH_HOME` with the plugin installed as a bundle and
+  `autoTuneCompaction: true`, a headless session discovered the route through the adapter, computed the per-route
+  headroom and wrote the tuned `compaction-basic` row into the profile patch **while the session ran** (observed row:
+  `thresholdRatio 0.8`, `headroomTokens 0`, `modelPolicies: [{mock/mock-model, headroomTokens 9012}]` for a backend
+  declaring 65536/4096). The session exited 0, and the plugin activates in a headless profile.
 - **`/trim tune` retunes a live process.** Compaction is an ordinary plugin row wherever the profile composes
   it on the profile plane (`dsh-base`: headless, tui), and cordis applies a config change by restarting the
   fiber — `Fiber.update()` resolves the new config and calls `restart()`, dispose plus a fresh apply, with no
