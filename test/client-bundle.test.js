@@ -103,11 +103,14 @@ test('the bundle registers into plugins.item behind the served namespace only', 
 	assert.equal(registered[0].options.label(), 'title');
 	assert.deepEqual(calls.model.fields.map((field) => [field.name, field.numeric]), [
 		['compactionTargetRatio', true],
-		['compactionRoute', false]
+		['compactionRoute', false],
+		['autoTuneCompaction', false],
+		['tuneStockDisabledRoutes', false],
+		['prunerThresholdChars', true]
 	]);
 });
 
-test('the component returns the summary one-liner and a two-field form body', async () => {
+test('the component returns the summary one-liner and the five-field form body', async () => {
 	const registration = await loadBundle();
 	const { primitives, react, calls } = stubs();
 	registration.factory((id) => (id === 'react' ? react : primitives));
@@ -130,12 +133,16 @@ test('the component returns the summary one-liner and a two-field form body', as
 	assert.equal(tree.type, primitives.SettingsForm, 'the platform supplies the frame; we render only its body');
 	assert.equal(tree.props.state.writable, true);
 	const labels = tree.children.map((childSection) => childSection.props.label);
-	assert.deepEqual(labels, ['compactionTargetRatio', 'compactionRoute']);
+	assert.deepEqual(labels, ['compactionTargetRatio', 'compactionRoute', 'autoTuneCompaction', 'tuneStockDisabledRoutes', 'prunerThresholdChars']);;
 	assert.equal(tree.children[0].props.numeric, true);
 	assert.equal(tree.children[1].props.numeric, undefined, 'the route field is free text');
 	assert.equal(tree.children[0].props.hint, 'compactionTargetRatioHint');
 	assert.deepEqual(tree.children[0].props.onEdit('0.75'), ['compactionTargetRatio', '0.75']);
 	assert.equal(tree.children[1].props.onReset(), 'compactionRoute');
+	assert.equal(tree.children[2].props.numeric, undefined, 'the auto-tune switch is text: the card types true/false');
+	assert.equal(tree.children[3].props.hint, 'tuneStockDisabledRoutesHint');
+	assert.equal(tree.children[4].props.numeric, true, 'the pruner threshold takes digits');
+	assert.deepEqual(tree.children[4].props.onEdit('32768'), ['prunerThresholdChars', '32768']);
 	assert.equal(typeof tree.props.onSave, 'function');
 	assert.equal(typeof tree.props.onDiscard, 'function');
 });

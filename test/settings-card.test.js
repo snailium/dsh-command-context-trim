@@ -30,7 +30,13 @@ test('exactly the two tuning fields are volatile, so the card shows exactly thos
 		assert.deepEqual(volatileFields(Config), [], 'a harness without .volatile() must not break the import');
 		return;
 	}
-	assert.deepEqual(volatileFields(Config), ['compactionRoute', 'compactionTargetRatio']);
+	assert.deepEqual(volatileFields(Config), [
+		'autoTuneCompaction',
+		'compactionRoute',
+		'compactionTargetRatio',
+		'prunerThresholdChars',
+		'tuneStockDisabledRoutes'
+	]);
 	const json = Config.toJSON();
 	const route = json.refs[json.refs[json.uid].dict.compactionRoute.uid ?? json.refs[json.uid].dict.compactionRoute];
 	assert.match(route.meta.description, /provider:model/, 'a volatile field needs a description for the form hint');
