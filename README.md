@@ -1,7 +1,8 @@
 # dsh-command-context-trim
 
-A **model-free `/trim` command** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): drop the oldest,
-least valuable span of a conversation so a session can continue on a **smaller-context model** — without a single model call.
+A **model-free `/trim` command** and a **compaction-threshold tuner** for
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): give a small-window local model every token it can
+actually use, compact it less often, and repair a blown context window without a single model call.
 
 [中文说明 →](README.zh.md)
 
@@ -18,6 +19,39 @@ too-small local window the recovery call overflows too, and the original error i
 `/trim` needs no model at all. It measures the current request under the target route, picks the oldest
 tool-pairing-balanced span that frees exactly enough tokens, and shadows that span with one short marker message. Two
 synchronous appends, zero LLM calls — it works precisely when every request is failing.
+
+The other half of this plugin goes after the cause instead of the symptom: it raises *where* compaction fires, which
+on a small local window is the difference between using most of the context or less than half of it.
+
+## What this buys a local model
+
+DSH reserves a **fixed 65536-token headroom** whatever the window is, and the trigger is
+`min(thresholdRatio × W, W − R − headroom)` where `R` is the route's own output reserve. On a million-token cloud
+route that barely matters. On a local card it decides everything:
+
+| route | W | R | dsh default trigger | tuned (`headroomTokens: 0`, `r = 0.8`) | usable context |
+|---|---:|---:|---:|---:|---|
+| `b70-sycl` / `xtx-vulkan` / `b70-smg` | 131072 | 16384 | 49152 — **37.5 %** | 104857 — **80.0 %** | **+55705 tokens, 2.1×** |
+| `bonsai-8gb` | 40960 | 8192 | *no pressure path at all* (the route cannot compact early) | 32768 — 80.0 % | a route that could not compact proactively now can |
+| Bonsai2 at 40960 / 16384 | 40960 | 16384 | *no pressure path at all* | 24576 — 60.0 % (its ceiling) | +24576 usable tokens |
+| `deepseek-official` (cloud) | 1000000 | 256000 | 678464 — 67.8 % | 744000 — 74.4 % | barely moves — tuning matters where the window is small |
+
+Three consequences, in the order they matter:
+
+1. **More usable context, so the model reasons over more of the real history.** On the routes above the ratio is no
+   longer capped by a fixed reserve, so the session keeps roughly twice the conversation before anything is condensed.
+2. **Fewer compactions — and compaction is the expensive part.** It costs a model call that *blocks the turn*
+   (measured at 209–372 s with a local summarizer). Compacting later and less often removes those stalls.
+3. **When the window is blown anyway, it is repaired without a model.** `/trim` shadows the oldest balanced span with
+   a marker synchronously, with zero LLM calls: the turn continues in milliseconds instead of waiting minutes for a
+   summarizer that may overflow for the very reason the request did. Installed in a profile, it also runs itself on
+   `CONTEXT_WINDOW_EXCEEDED` (`emergencyTrim`), so the wall does not end the turn.
+
+Two honest limits. Where the route's own reserve is larger than `(1 − r) × W`, the ratio is *unreachable by
+construction* — `ovms` (81920/65536), `opencode-go`, and a 16384-reserve Bonsai2 are capped at 20 %, 61.6 % and 60 %
+respectively; the tuner moves those to their real ceiling rather than pretending. And the tuning applies where
+compaction is composed on the profile plane (headless, tui); a web profile keeps compaction inside each session's
+agent-preset realm, where a runtime write cannot reach a running session — see *Retuning the live process* below.
 
 ## Install
 
