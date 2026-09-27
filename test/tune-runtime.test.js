@@ -51,7 +51,12 @@ function stubContext(request = {}) {
 	return ctx;
 }
 
-const agent = { session: { seq: 0, eventAt: () => undefined } };
+function stubSession() {
+	const appended = [];
+	return { appended, seq: 0, eventAt: () => undefined, append: (type, data) => appended.push({ type, data }) };
+}
+const session = stubSession();
+const agent = { session };
 const signal = new AbortController().signal;
 const CONFIG = () => resolveConfig({});
 
@@ -198,4 +203,39 @@ test('a retune is reported on stderr, and a no-op check is not', async () => {
 	} finally {
 		process.stderr.write = original;
 	}
+});
+
+test('an applied retune is recorded as a non-surface session event', async () => {
+	const ctx = stubContext();
+	const own = stubSession();
+	const ownAgent = { session: own };
+	const applied = await tuneCompactionAtRuntime(ctx, CONFIG(), { agent: ownAgent, signal, trigger: 'command' });
+	assert.equal(applied.result.kind, 'success');
+	assert.equal(own.appended.length, 1, 'exactly one record per applied retune');
+	const [record] = own.appended;
+	assert.equal(record.type, 'context-trim/tuned');
+	assert.equal(record.data.mode, 'runtime');
+	assert.equal(record.data.trigger, 'command');
+	assert.equal(record.data.thresholdRatio, 0.8);
+	assert.equal(record.data.headroomTokens, 0);
+	assert.deepEqual(record.data.changedKeys, ['headroomTokens', 'maxTokens', 'modelPolicies', 'thresholdRatio']);
+	assert.equal(record.data.routes[0].provider, 'lc');
+	assert.equal(record.data.routes[0].contextWindow, 131072);
+	assert.equal(record.data.policies[0].headroomTokens, 9831, 'the per-route policy is legible for analysis');
+	// It is not a surface event: nothing may join the request.
+	assert.equal('surfaceOp' in record.data, false);
+
+	// A no-op check records nothing, and a session that refuses the append cannot break the tuning.
+	const quiet = stubSession();
+	quiet.append = () => {
+		throw new Error('session refused the record');
+	};
+	const noop = await tuneCompactionAtRuntime(stubContext({ rowConfig: { thresholdRatio: 0.8, headroomTokens: 0, maxTokens: 8192, modelPolicies: [{ provider: 'lc', model: '/models/q.gguf', thresholdRatio: 0.8, headroomTokens: 9831 }] } }), CONFIG(), { agent: { session: quiet }, signal });
+	assert.equal(noop.result.kind, 'success', 'a refused record must not fail the tuning');
+	assert.equal(quiet.appended.length, 0, 'the refused record never landed');
+
+	const untouched = stubSession();
+	const again = await tuneCompactionAtRuntime(stubContext({ rowConfig: { thresholdRatio: 0.8, headroomTokens: 0, maxTokens: 8192, modelPolicies: [{ provider: 'lc', model: '/models/q.gguf', thresholdRatio: 0.8, headroomTokens: 9831 }] } }), CONFIG(), { agent: { session: untouched }, signal });
+	assert.equal(again.result.kind, 'success');
+	assert.equal(untouched.appended.length, 0, 'an unchanged row writes no record');
 });

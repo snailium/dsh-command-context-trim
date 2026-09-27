@@ -46,6 +46,13 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **A retune is recorded in the session log for analysis.** Every applied retune appends one non-surface
+  `context-trim/tuned` event carrying the settings written, the keys that changed, the capacity the adapter
+  actually reported per route, and the per-route policies. It is not a surface message, so it never enters the
+  model's context or the token bill, and it is not a known harness event type, so no client renders it — it is
+  there for session analysis, next to the `request/context` and `compaction/*` records. `stderr` keeps its one
+  line per retune for automated assertions. Verified live: a `DSH_TRIM_AUTO_TUNE=1` run wrote the record with
+  `trigger: "auto"`, `contextWindow: 65536` and `headroomTokens: 9012` for its mock route, and answered `ok`.
 - **Auto tune reports without touching the conversation.** A retune now prints exactly one line on stderr
   (`context-trim: auto compaction tune: Retuned compaction-basic (…)`) besides logging it, because the cordis
   logger only reaches a user where a profile wires an exporter and a headless profile does not — previously the
