@@ -393,7 +393,9 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.1...v0.2.2
