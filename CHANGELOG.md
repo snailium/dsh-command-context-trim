@@ -46,6 +46,21 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **The tuning is a per-backend decision, and the docs now say when it does not pay.** Measured by the backend-test
+  session on 2026-09-27, Bonsai 2 @ RTX 5060 8GB (40960 / 8192), same task and single route, tuning confirmed
+  applied: compaction events went **15 → 24** with the 80 % trigger on, and each event is a model call that blocks
+  the turn (209–372 s with a local summarizer). Where dsh's stock headroom already *disables* the trigger
+  (`message budget ≤ 65536`) the tuning cannot move a compaction — it creates one, so the honest advice for those
+  routes is to leave them alone and let the model-free `/trim` repair the wall. The README gains a *When it does not
+  pay* section, the container guide and the threshold handbook carry the same warning, and
+  `scripts/make-preset-patch.mjs` / `/trim preset` now print it as a caution for every route they plan in that group
+  (the `Qwen3.8:27b @ Intel Arc B70` row is unaffected: there the stock headroom *caps* a viable trigger, so 37.5 %
+  → 80 % is a reduction in compactions).
+- **An inventory that is not ready yet is a deferral, not a failure.** A headless boot can fire the first trigger
+  before the provider row has resolved, which printed `no routable provider/model pairs were found` immediately in
+  front of the `Retuned` line in the same boot — real in the field and worth fixing rather than explaining. It is now
+  reported as deferred: silent at debug level, never on stderr, and it does not poison the failure memory. The
+  manual `/trim tune check` still reports it on demand.
 - **A repeated refusal is reported once.** The guard against a plane it cannot reach (a web profile's preset
   realm, say) fails identically on every trigger, and the per-request trigger would have turned that into a
   stderr and logger line per request — which a stray `DSH_TRIM_AUTO_TUNE` in a service environment would have

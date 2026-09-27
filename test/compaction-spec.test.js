@@ -111,3 +111,24 @@ test('planCompactionTuning skips unusable routes with a reason and refuses an em
 	assert.throws(() => planCompactionTuning({ routes: [], targetRatio: 0.8 }), /no route in the inventory can carry a pressure threshold/);
 	assert.throws(() => planCompactionTuning({ routes: ROUTES, targetRatio: 0 }), /compactionTargetRatio \(0\) must be a number in \(0, 1\]/);
 });
+
+test('a route whose stock profile has no pressure path carries a caution note', () => {
+	// 40960 - 8192 = 32768 message budget, below dsh's stock 65536 headroom: stock cannot trigger at all,
+	// so tuning this route adds events instead of moving one. Measured on Bonsai 2: 15 -> 24 on one task.
+	const small = planCompactionTuning({
+		routes: [{ provider: 'lc', model: 'bonsai2', contextWindow: 40960, maxTokens: 8192 }],
+		targetRatio: 0.8
+	});
+	const smallNote = small.notes.find((note) => note.includes('caution'));
+	assert.ok(smallNote, `expected a caution note, got ${JSON.stringify(small.notes)}`);
+	assert.match(smallNote, /stock 65536 headroom already exceeds this route's 32768-token message budget/);
+	assert.match(smallNote, /15 -> 24 on one task/);
+
+	// A route the stock headroom does not disable gets no such note: there the tuning *reduces* compaction.
+	const big = planCompactionTuning({
+		routes: [{ provider: 'lc', model: 'qwen', contextWindow: 131072, maxTokens: 16384 }],
+		targetRatio: 0.8
+	});
+	assert.equal(big.notes.some((note) => note.includes('caution')), false, JSON.stringify(big.notes));
+	assert.match(big.notes.join('\n'), /triggers at 80\.0 %/);
+});

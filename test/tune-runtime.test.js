@@ -266,3 +266,40 @@ test('a repeated identical failure is reported once, not once per request', asyn
 		process.stderr.write = original;
 	}
 });
+
+test('an inventory that is not ready yet is a deferral, not a reported failure', async () => {
+	// Reproduced from a real headless boot: the earliest trigger can fire before the route inventory
+	// exists, and reporting it put a misleading line in front of a successful retune in the same boot.
+	const bareListeners = new Map();
+	const bare = {
+		on: (name, listener) => bareListeners.set(name, listener),
+		get: (name) => (name === 'compaction' ? {} : name === 'configEditor' ? {
+			entries: () => [{ options: { id: 'compaction-basic', config: {} }, fiber: { state: 2 } }],
+			edit: async () => {
+				throw new Error('must not be called');
+			}
+		} : undefined),
+		logger: { info() {}, warn() {}, debug() {} }
+	};
+	const deferred = await tuneCompactionAtRuntime(bare, CONFIG(), { agent, signal });
+	assert.equal(deferred.result.kind, 'deferred', deferred.result.text);
+	assert.match(deferred.result.text, /no routable provider\/model pairs are visible yet/);
+	assert.match(deferred.result.text, /next trigger will retry/);
+	assert.match(deferred.result.text, /\/trim tune check reports it on demand/);
+
+	// The automatic path must stay silent about it: no stderr, no failure memory.
+	const written = [];
+	const original = process.stderr.write.bind(process.stderr);
+	process.stderr.write = (chunk, ...rest) => {
+		written.push(String(chunk));
+		return original(chunk, ...rest);
+	};
+	try {
+		const auto = registerAutoTune(bare, { autoTuneCompaction: true });
+		void auto;
+		await bareListeners.get('agent/created')({ agent });
+		assert.equal(written.length, 0, `expected silence, got ${JSON.stringify(written)}`);
+	} finally {
+		process.stderr.write = original;
+	}
+});

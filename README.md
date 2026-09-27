@@ -32,19 +32,43 @@ route that barely matters. On a local card it decides everything:
 | route | W | R | dsh default trigger | tuned (`headroomTokens: 0`, `r = 0.8`) | usable context |
 |---|---:|---:|---:|---:|---|
 | `Qwen3.8:27b @ Intel Arc B70` | 131072 | 16384 | 49152 — **37.5 %** | 104857 — **80.0 %** | **+55705 tokens, 2.1×** |
-| `Bonsai 2 @ RTX 5060 8GB` | 40960 | 8192 | *no pressure path at all* (the route cannot compact early) | 32768 — 80.0 % | a route that could not compact proactively now can |
+| `Bonsai 2 @ RTX 5060 8GB` | 40960 | 8192 | *no pressure path at all* (the route cannot compact early) | 32768 — 80.0 % | +32768 — but **measured slower**: see *When it does not pay* |
 | `deepseek-official` (cloud) | 1000000 | 256000 | 678464 — 67.8 % | 744000 — 74.4 % | barely moves — tuning matters where the window is small |
 
 Three consequences, in the order they matter:
 
 1. **More usable context, so the model reasons over more of the real history.** On the routes above the ratio is no
    longer capped by a fixed reserve, so the session keeps roughly twice the conversation before anything is condensed.
-2. **Fewer compactions — and compaction is the expensive part.** It costs a model call that *blocks the turn*
-   (measured at 209–372 s with a local summarizer). Compacting later and less often removes those stalls.
+2. **Fewer compactions where the stock headroom was capping the trigger — and compaction is the expensive part.**
+   It costs a model call that *blocks the turn* (measured at 209–372 s with a local summarizer), so compacting
+   later and less often removes those stalls. Read *When it does not pay* below before enabling this on a small
+   window: there the same mechanism works in reverse.
 3. **When the window is blown anyway, it is repaired without a model.** `/trim` shadows the oldest balanced span with
    a marker synchronously, with zero LLM calls: the turn continues in milliseconds instead of waiting minutes for a
    summarizer that may overflow for the very reason the request did. Installed in a profile, it also runs itself on
    `CONTEXT_WINDOW_EXCEEDED` (`emergencyTrim`), so the wall does not end the turn.
+
+### When it does not pay
+
+The benefit above is a *fewer, later* compactions benefit, and it exists only where the stock headroom was **capping**
+a trigger the route could otherwise support. Where the stock headroom already **disables** the trigger outright — a
+message budget at or below dsh's 65536 — turning one on cannot move an existing compaction; it **adds** events, and
+every event is a summarizer call that blocks the turn.
+
+Measured on `Bonsai 2 @ RTX 5060 8GB` (40960 / 8192) by the backend-test session on 2026-09-27, same task, single
+route, tuning confirmed applied end to end: **15 → 24 compactions** with the 80 % trigger on, and prompt volume for
+the run grew with them. With a local summarizer at 209–372 s per call, that is a net loss even though no individual
+turn is wrong. So:
+
+- enable the tuning where it **raises** an existing trigger (`message budget > 65536`, i.e. the large-window rows
+  above, where 37.5 % becomes 80 %);
+- **leave a small-window route alone** (`message budget ≤ 65536`) and let `/trim` repair the wall instead — it costs
+  no model call, so it cannot lose this trade;
+- do not switch auto-tuning on globally for a fleet: it is a per-backend decision. `DSH_TRIM_AUTO_TUNE=1` belongs on
+  the backends whose window is big enough to benefit.
+
+`scripts/make-preset-patch.mjs` and `/trim preset` now print this caution for every route they plan that falls in the
+second group, so the decision is made with the measurement in front of you.
 
 Two honest limits. Where the route's own reserve is larger than `(1 − r) × W`, the ratio is *unreachable by
 construction* — `ovms` (81920/65536) and `opencode-go` are capped at 20 % and 61.6 % respectively; the tuner
