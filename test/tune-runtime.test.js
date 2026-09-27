@@ -122,6 +122,7 @@ test('auto tune writes immediately, without waiting for an idle moment', async (
 	const on = stubContext();
 	const auto = registerAutoTune(on, { autoTuneCompaction: true });
 	assert.deepEqual([...on.listeners.keys()].sort(), ['agent/created', 'agent/request', 'agent/status', 'session/event']);
+	assert.equal(typeof auto.pending, 'function', 'the write is not awaited on the request path, so it exposes a handle');
 
 	// A one-shot headless run may never be idle: the agent's creation must already tune.
 	await on.listeners.get('agent/created')({ agent });
@@ -150,12 +151,14 @@ test('auto tune writes immediately, without waiting for an idle moment', async (
 		CATALOG.lc['/models/q.gguf'] = { contextWindow: 131072, defaultMaxTokens: 16384 };
 	}
 
-	// The system-prompt insertion is the other signal, and it reuses the agent it has seen.
+	// A model switch is announced on the session, which is resolved to its agent rather than guessed.
 	on.edits.length = 0;
 	CATALOG.lc['/models/q.gguf'] = { contextWindow: 8192, defaultMaxTokens: 1024 };
 	try {
-		await on.listeners.get('session/event')({}, { type: 'system/message' });
-		assert.equal(on.edits.length, 1, 'a prompt insertion also triggers a re-check');
+		await on.listeners.get('session/event')(agent.session, { type: 'model/selection' });
+		assert.equal(on.edits.length, 1, 'a model switch is picked up without waiting for a request');
+		await on.listeners.get('session/event')(agent.session, { type: 'system/message' });
+		assert.equal(on.edits.length, 1, 'a signal with no route meaning does nothing');
 	} finally {
 		CATALOG.lc['/models/q.gguf'] = { contextWindow: 131072, defaultMaxTokens: 16384 };
 	}

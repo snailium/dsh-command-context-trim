@@ -46,6 +46,16 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **Trigger set reviewed, not accumulated.** Auto tune fires on `agent/created`, on every `agent/request`
+  before it is sent, on a session's `model/selection`, and on an idle moment. The system-prompt insertion was
+  dropped: it fires inside the same step *after* the request hook, so it only duplicated the check while
+  needing a guess at the agent. The write is immediate and not awaited, which is what a one-shot
+  `dsh headless "task"` needs.
+- **`DSH_TRIM_AUTO_TUNE` turns auto tuning on (or off) from the environment**, overriding the profile's own
+  setting: `1/true/yes/on` and `0/false/no/off` are accepted, an empty value means unset, anything else fails
+  loudly at load. Verified live with no switch in any patch at all — `DSH_TRIM_AUTO_TUNE=1` plus a task that
+  used no tool and never went idle still landed the tuned `compaction-basic` row in the profile patch. The
+  README's permission table now states this one environment read explicitly.
 - **Auto tune now works in one-shot headless runs.** The triggers are `agent/created`, **every
   `agent/request` before it is sent**, the system-prompt insertion and (for long-lived profiles) an idle
   moment; the write happens immediately and is not awaited, because a `dsh headless "task"` process never

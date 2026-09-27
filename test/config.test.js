@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULTS, budgetFor, resolveConfig, retentionFor } from '../lib/config.js';
+import { AUTO_TUNE_ENV, DEFAULTS, budgetFor, envFlag, resolveConfig, retentionFor } from '../lib/config.js';
 
 test('defaults match the documented bundle patch', () => {
 	const resolved = resolveConfig({});
@@ -51,4 +51,31 @@ test('compaction tuning: the ratio is bounded and the route is all-or-nothing', 
 test('emergencyTrim is a boolean switch', () => {
 	assert.equal(resolveConfig({ emergencyTrim: false }).emergencyTrim, false);
 	assert.throws(() => resolveConfig({ emergencyTrim: 'yes' }), /emergencyTrim must be a boolean/);
+});
+
+test('DSH_TRIM_AUTO_TUNE overrides the profile switch, and an unset variable means no opinion', () => {
+	const previous = process.env[AUTO_TUNE_ENV];
+	try {
+		delete process.env[AUTO_TUNE_ENV];
+		assert.equal(envFlag(AUTO_TUNE_ENV), undefined);
+		assert.equal(resolveConfig({ autoTuneCompaction: true }).autoTuneCompaction, true, 'the profile decides');
+		assert.equal(resolveConfig({}).autoTuneCompaction, false, 'off by default');
+
+		for (const value of ['1', 'true', 'YES', 'on']) {
+			process.env[AUTO_TUNE_ENV] = value;
+			assert.equal(resolveConfig({ autoTuneCompaction: false }).autoTuneCompaction, true, `${value} turns it on`);
+		}
+		for (const value of ['0', 'false', 'No', 'off']) {
+			process.env[AUTO_TUNE_ENV] = value;
+			assert.equal(resolveConfig({ autoTuneCompaction: true }).autoTuneCompaction, false, `${value} turns it off`);
+		}
+		process.env[AUTO_TUNE_ENV] = '   ';
+		assert.equal(resolveConfig({}).autoTuneCompaction, false, 'an empty variable is the same as unset');
+
+		process.env[AUTO_TUNE_ENV] = 'maybe';
+		assert.throws(() => resolveConfig({}), /DSH_TRIM_AUTO_TUNE must be one of 1\/true\/yes\/on or 0\/false\/no\/off/u);
+	} finally {
+		if (previous === undefined) delete process.env[AUTO_TUNE_ENV];
+		else process.env[AUTO_TUNE_ENV] = previous;
+	}
 });
