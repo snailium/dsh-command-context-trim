@@ -20,6 +20,12 @@ All notable changes to this project are documented here. This project adheres to
   here, which is why 127 green unit tests could not see the bug.
 - Upgrade before relying on a session that contains a trim and was written by 0.3.0 or any 0.2.x under
   0.1.7. Sessions still in format v3 are converted correctly by dsh itself.
+- Verified per line, by running each line's own admission validator rather than reasoning about the
+  formats: 0.1.2-rc.1 ships no row-admission validator and the only `kind !== "plugin"` checks in that
+  closure belong to other plugins' markers, so both shapes are accepted; 0.1.5-rc.3's
+  `assertV3RowAdmission` accepts both; 0.1.7-rc.2's `assertV4RowAdmission` accepts this version's kind and
+  rejects the retired wrapper. 0.3.1 is therefore not restricted to 0.1.7 — 0.3.0 is the restricted one.
+  `scripts/check-session-marker.mjs` now runs every validator a line ships and is wired into the CI legs.
 
 
 ## [0.3.0] - 2026-09-26

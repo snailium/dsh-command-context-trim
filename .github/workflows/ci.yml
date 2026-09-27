@@ -80,16 +80,13 @@ jobs:
       - name: Report the harness under test
         run: |
           node -e "for (const p of ['dsh-session','dsh-llm','dsh-compaction','dsh-token-meter']) console.log(p, require('@deepseek-ai/' + p + '/package.json').version)"
-      - name: Check the v4 session-marker shape against this harness
+      - name: Check the session-marker shape against this harness
         run: |
-          # The rule lives in dsh, not here: session format v4 refuses the retired
-          # {kind: 'plugin'} wrapper, and unit tests cannot see that. Guarded because only
-          # the lines that ship the v4 format module have anything to check.
-          if [ -d node_modules/@deepseek-ai/dsh-session-format-v3-to-v4 ]; then
-            node scripts/check-session-marker.mjs --prefix .
-          else
-            echo "this harness line ships no v4 format module; skipping"
-          fi
+          # The rule lives in dsh, not here: v4 refuses the retired {kind: 'plugin'} wrapper, which
+          # unit tests cannot see. The script runs every admission validator this line ships and
+          # reports when there is none (0.1.2 has none, 0.1.5 accepts both shapes, 0.1.7 requires
+          # this version's kind).
+          node scripts/check-session-marker.mjs --prefix .
       - name: Run deterministic suite
         run: npm test
       - name: Syntax check

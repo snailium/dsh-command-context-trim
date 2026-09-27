@@ -240,7 +240,16 @@ tail is a hard boundary and the final message is never dropped.
 `plugin:dsh-command-context-trim` — the `plugin:<plugin id>` shape v4 requires — because 0.1.7's admission path
 refuses the retired `{kind: 'plugin'}` wrapper with `format v4 message requires a producer-owned source kind`.
 Markers written before 0.3.1 are still recognised by this plugin, and dsh rewrites them when it upgrades a v3
-session. Re-check the shape against an installed dsh any time (a dsh upgrade could change the rule):
+session. This is **not** a 0.1.7-only release: running each line's own admission validator gives
+
+| harness line | this version's marker | the retired wrapper |
+|---|---|---|
+| 0.1.2-rc.1 | accepted (the line ships no row-admission validator; the only `kind !== "plugin"` checks belong to other plugins' own markers) | accepted |
+| 0.1.5-rc.3 | accepted (`assertV3RowAdmission`) | accepted |
+| 0.1.7-rc.2 | accepted (`assertV4RowAdmission`) | **rejected** — the bug 0.3.1 fixes |
+
+so `0.3.0` is the version that is restricted, to *older* lines being unaffected and 0.1.7 broken. Re-check the
+shape against an installed dsh any time (a dsh upgrade could change the rule):
 
 ```bash
 node scripts/check-session-marker.mjs --prefix <dir with node_modules/@deepseek-ai>
