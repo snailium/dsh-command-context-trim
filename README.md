@@ -347,9 +347,10 @@ there instead (see `/trim preset`).
 rather than accumulated: the agent's creation (`agent/created`, the earliest point and the only one a
 one-shot run is guaranteed to reach), **every request** before it is sent (`agent/request` — the guarantee
 that a route change is applied before the request that would use it), a session's `model/selection` (the
-precise "the route changed" signal, announced at a quieter moment than the following request), and an idle
-moment in a long-lived profile. A system-prompt insertion is deliberately **not** a trigger: it fires inside
-the same step, after the request hook, so it only duplicated the check and had to guess at the agent. The write is
+precise "the route changed" signal, available before the next request rather than only inside it), and an idle
+moment in a long-lived profile — the one trigger that takes the write outside a step entirely. A system-prompt insertion is deliberately **not** a trigger: it is committed even earlier in the same step
+(the surface is built before the request hook), so it adds a second recompute for that step while still
+needing a guess at the agent — the per-request hook already covers the moment. The write is
 immediate and intentionally not awaited: a one-shot `dsh headless "task"` never reaches an idle moment, and
 that is exactly where automated sessions live. It is safe early — the first trigger fires before anything
 can be compacting — and idempotent, so an unchanged route writes nothing and a per-request re-check costs

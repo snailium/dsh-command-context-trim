@@ -48,8 +48,8 @@ All notable changes to this project are documented here. This project adheres to
 
 - **Trigger set reviewed, not accumulated.** Auto tune fires on `agent/created`, on every `agent/request`
   before it is sent, on a session's `model/selection`, and on an idle moment. The system-prompt insertion was
-  dropped: it fires inside the same step *after* the request hook, so it only duplicated the check while
-  needing a guess at the agent. The write is immediate and not awaited, which is what a one-shot
+  dropped: it is committed even earlier in the same step (the surface is built before the request hook), so it
+  added a second recompute for that step while still needing a guess at the agent. The write is immediate and not awaited, which is what a one-shot
   `dsh headless "task"` needs.
 - **`DSH_TRIM_AUTO_TUNE` turns auto tuning on (or off) from the environment**, overriding the profile's own
   setting: `1/true/yes/on` and `0/false/no/off` are accepted, an empty value means unset, anything else fails
