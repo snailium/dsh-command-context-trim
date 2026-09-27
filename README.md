@@ -81,6 +81,24 @@ moves those to their real ceiling rather than pretending. And the tuning applies
 compaction is composed on the profile plane (headless, tui); a web profile keeps compaction inside each session's
 agent-preset realm, where a runtime write cannot reach a running session — see *Retuning the live process* below.
 
+### The preset route is locked and has to stay resolvable
+
+A session's preset is fixed once it starts (`agent-preset/locked`), and a **fork inherits the parent's preset and
+is locked the same way**: `buildForkSeed` copies the parent's `turn/start` events into the child
+(`dsh-session/lib/index.js:884-893`), and forking requires a completed turn to begin with, so the child's
+`turnBoundary.lastTurn` is already above zero when it is created.
+
+The sharper edge is permanence. `agentPresets.resolve(id)` has no fallback — an unknown explicit id throws
+`agent-preset/not-found` (`dsh-agent-preset-registry/lib/index.js:603-610`) — so if a preset id disappears, every
+session bound to it can be neither resumed nor forked, and the lock means it cannot be re-pointed at another one.
+A dsh upgrade overwrites the **shipped** presets, and a generated preset can be deleted by hand; the id you generate
+is therefore a durable interface. Keep it stable across plugin upgrades, keep at least one copy, and use
+`/trim preset default` so that *new* sessions pick it up — existing ones will not follow.
+
+On headless/tui the profile-plane path (`autoTuneCompaction`, `prunerThresholdChars`) has none of these problems,
+because there `dsh-base` inserts both rows into the profile and a patch layer retunes them on every boot. Prefer
+that plane where it exists; the preset route is the web-shaped exception.
+
 ## Install
 
 ```bash
