@@ -80,6 +80,16 @@ jobs:
       - name: Report the harness under test
         run: |
           node -e "for (const p of ['dsh-session','dsh-llm','dsh-compaction','dsh-token-meter']) console.log(p, require('@deepseek-ai/' + p + '/package.json').version)"
+      - name: Check the v4 session-marker shape against this harness
+        run: |
+          # The rule lives in dsh, not here: session format v4 refuses the retired
+          # {kind: 'plugin'} wrapper, and unit tests cannot see that. Guarded because only
+          # the lines that ship the v4 format module have anything to check.
+          if [ -d node_modules/@deepseek-ai/dsh-session-format-v3-to-v4 ]; then
+            node scripts/check-session-marker.mjs --prefix .
+          else
+            echo "this harness line ships no v4 format module; skipping"
+          fi
       - name: Run deterministic suite
         run: npm test
       - name: Syntax check
