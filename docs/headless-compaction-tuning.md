@@ -166,6 +166,27 @@ reaches exactly the ratio and needs no per-route entry at all — most local bac
 and 1M/384k reaches 61.6 %. Those are the routes `--routes`/`--dump` exist for; the per-route headroom
 they emit is `(W − R) − floor(r·W)`.
 
+## 6c. Retuning a long-lived process at runtime
+
+A one-shot `dsh headless "task"` boots, answers and exits, so the boot overlay already covers every
+session (that is why this document's main route needs nothing else). A **long-lived** process is the case
+where a runtime change matters, and there it works like this:
+
+- `Fiber.update()` — what the configuration editor calls when it writes a row — resolves the new config
+  and calls `restart()` on a loaded fiber (dispose + fresh apply). This is generic to every plugin entry.
+- So with the plugin installed, `/trim tune` reads the routes through `ctx.llm.resolveModelInfo` (adapter
+  truth, not the declaration), computes the same tuning the overlay carries, and writes it onto the
+  `compaction-basic` row. The next request uses it.
+- `autoTuneCompaction: true` does the same thing once per process, the first time the agent goes idle —
+  deliberately idle, because a restarted row cancels work in progress.
+- In a **web** profile this is refused with an explanation: compaction there lives inside each session's
+  agent-preset isolate realm, so a host-plane write cannot reach a running session, and a session's preset
+  is locked once it starts.
+
+Not verified live: the *behavioural* effect (a real overflow firing at the new fraction after a runtime
+write). The mechanism is source-verified and the write path is the one the settings cards use, which was
+watched working on a live profile patch.
+
 ## 7b. If you also want the plugin's own trimming in those sessions
 
 The overlay above only sets compaction's thresholds. To get this plugin's `/trim` command and its

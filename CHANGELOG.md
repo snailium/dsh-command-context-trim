@@ -46,6 +46,15 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Notes
 
+- **`/trim tune` retunes a live process.** Compaction is an ordinary plugin row wherever the profile composes
+  it on the profile plane (`dsh-base`: headless, tui), and cordis applies a config change by restarting the
+  fiber — `Fiber.update()` resolves the new config and calls `restart()`, dispose plus a fresh apply, with no
+  "hot-reloadable only" restriction (read from the loader source). The command therefore reads the routes from
+  the adapter (`ctx.llm.resolveModelInfo`, the same source compaction uses), computes the tuning, and writes it
+  onto the `compaction-basic` row; the write is skipped when nothing changes and refused with an explanation
+  where it cannot reach — a web profile keeps compaction inside each session's agent-preset isolate realm, and a
+  session's preset is locked once it starts. `autoTuneCompaction` (default `false`) does the same once per
+  process, the first time the agent goes idle, so the restart cannot cancel an in-flight compaction.
 - **The generator no longer guesses a window.** `scripts/make-preset-patch.mjs` resolves the route capacity
   from, in order: `--routes`, `--dump <file>` (a `dsh … --dump-config` output, parsed for `llm-pi-ai`'s
   provider table and `agent-default-model`; the script never spawns dsh), and the

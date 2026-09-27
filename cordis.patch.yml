@@ -55,6 +55,11 @@
         # (the original task statement) may be elided too; the newest human
         # instruction is still never crossed. At most one per overflow episode.
         emergencyTrim: true
+        # Off by default: when true, the plugin retunes this profile's compaction row once
+        # per process, the first time the agent goes idle. Only meaningful where compaction
+        # is composed on the profile plane (headless/tui); a web profile keeps it inside each
+        # session's preset, so there the plugin refuses and explains instead.
+        autoTuneCompaction: false
         # ── preset tuning (used by the `/trim preset` command) ──────────────
         # Fraction of each routed model's window at which the GENERATED preset
         # makes compaction fire. This only writes that preset's compaction-basic
