@@ -25,6 +25,7 @@ import { FALLBACK_SUMMARIZER_MAX_TOKENS, planCompactionTuning } from '../lib/com
 import { resolveRouteInventory } from '../lib/dump-routes.js';
 import { extractPluginsFromPatch } from '../lib/preset-yaml.js';
 import { buildHostTunedPatch, buildTunedPresetPatch } from '../lib/tuned-preset.js';
+import { renderPlainConfig, setEntryConfig } from '../lib/preset-yaml.js';
 
 const USAGE = `usage: make-preset-patch.mjs --base <preset.patch.yml|plugins.yml> [options]
 
@@ -40,6 +41,10 @@ const USAGE = `usage: make-preset-patch.mjs --base <preset.patch.yml|plugins.yml
   --context-window <n> FALLBACK window, used only when no route could be read
   --max-tokens <n>     FALLBACK output reserve for that same route (default: 0)
   --model <p:m>        name the fallback route; without it no per-route policy can be emitted
+  --pruner-threshold-chars <n>
+                              also raise the tool-result pruner's thresholdChars (dsh default 8192),
+                              so one whole-file read is not clipped away; headChars/tailChars keep
+                              dsh's defaults unless you edit the emitted row
   --include-stock-disabled-routes
                               enable a pressure trigger even on routes whose stock profile has none
                               (default: keep them at stock; see the caution in the output)
@@ -121,7 +126,36 @@ const { patch } = mode === 'host' ? buildHostTunedPatch({ plan }) : buildTunedPr
 });
 if (args.out === undefined) process.stdout.write(patch);
 else {
-	writeFileSync(args.out, patch);
+	const prunerThresholdChars = args['pruner-threshold-chars'] === undefined
+		? undefined
+		: Number(args['pruner-threshold-chars']);
+	if (prunerThresholdChars !== undefined && (!Number.isInteger(prunerThresholdChars) || prunerThresholdChars <= 0)) {
+		fail('--pruner-threshold-chars must be a positive integer');
+	}
+	let finalPatch = patch;
+	if (prunerThresholdChars !== undefined) {
+		const pruneRow = {
+			thresholdChars: prunerThresholdChars,
+			headChars: 4096,
+			tailChars: 1024
+		};
+		if (mode === 'host') {
+			if (!finalPatch.endsWith('\n')) finalPatch += '\n';
+			finalPatch +=
+				'\n# The tool-result pruner: raise the clip threshold so one whole-file read survives.\n' +
+				"- id: tool-result-pruner\n  name: '@deepseek-ai/dsh-compaction-tool-result-pruner'\n  config:\n" +
+				`    thresholdChars: ${pruneRow.thresholdChars}\n    headChars: ${pruneRow.headChars}\n    tailChars: ${pruneRow.tailChars}\n`;
+			process.stdout.write(`  pruner: thresholdChars ${pruneRow.thresholdChars} (headChars ${pruneRow.headChars}, tailChars ${pruneRow.tailChars})\n`);
+		} else {
+			const spliced = setEntryConfig(finalPatch, 'tool-result-pruner', pruneRow, renderPlainConfig);
+			if (spliced === null) {
+				fail('--pruner-threshold-chars was given but the base preset declares no tool-result-pruner row');
+			}
+			finalPatch = spliced;
+			process.stdout.write(`  pruner (inside the preset): thresholdChars ${pruneRow.thresholdChars}\n`);
+		}
+	}
+	writeFileSync(args.out, finalPatch);
 	process.stderr.write(`wrote ${args.out}\n`);
 }
 process.stderr.write(`  route source: ${resolved.source}\n`);
@@ -146,7 +180,7 @@ function parseArgs(argv) {
 			out[key] = true;
 			continue;
 		}
-		if (!['base', 'id', 'name', 'description', 'order', 'ratio', 'routes', 'dump', 'context-window', 'max-tokens', 'model', 'route', 'summarizer-max-tokens', 'registry', 'mode', 'out'].includes(key)) fail(`unknown option ${arg}`);
+		if (!['base', 'id', 'name', 'description', 'order', 'ratio', 'routes', 'dump', 'context-window', 'max-tokens', 'model', 'route', 'summarizer-max-tokens', 'registry', 'mode', 'out', 'pruner-threshold-chars'].includes(key)) fail(`unknown option ${arg}`);
 		if (key === 'route') {
 			out.route = argv[++index];
 			if (out.route === undefined) fail('--route needs provider:model');

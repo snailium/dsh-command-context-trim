@@ -5,6 +5,23 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-27
+
+### Added
+
+- **The tuner can raise the tool-result pruner's clip threshold.** `prunerThresholdChars` (default `0`, which
+  leaves the pruner alone) writes `tool-result-pruner`'s `thresholdChars` — the lever that matters on a small
+  window, where dsh's 8192-character default clips every whole-file `read` back to a head and a tail, and the agent
+  reads the same file again. It is the same profile plane and the same reachability rule as the compaction row:
+  where a web profile keeps the pruner inside each session's preset, `/trim tune` reports that and writes nothing,
+  while `scripts/make-preset-patch.mjs --pruner-threshold-chars` splices it into a preset instead. The value lands
+  in the `context-trim/tuned` record beside the compaction settings, so one analysis pass sees both halves.
+
+  The two halves differ by regime, which is why the default stays `0`: on a stock small window raising the pruner
+  threshold is a pure win (that route has no pressure trigger, so a larger prompt cannot cause more compactions),
+  while on a route whose pressure trigger is enabled it makes each request bigger and remains a deliberate trade.
+
+
 ## [0.3.1] - 2026-09-27
 
 ### Fixed

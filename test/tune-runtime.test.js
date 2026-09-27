@@ -12,15 +12,21 @@ function stubContext(request = {}) {
 	const listeners = new Map();
 	const rowConfig = request.rowConfig ?? { auto: true, retainRatio: 0.16 };
 	const row = { options: { id: 'compaction-basic', name: '@deepseek-ai/dsh-compaction-basic', config: rowConfig }, fiber: { state: request.rowState ?? 2 } };
+	const prunerRow = { options: { id: 'tool-result-pruner', name: '@deepseek-ai/dsh-compaction-tool-result-pruner', config: request.prunerConfig ?? { thresholdChars: 8192, headChars: 4096, tailChars: 1024 } }, fiber: { state: 2 } };
 	const ctx = {
 		edits,
 		listeners,
 		get(name) {
 			if (name === 'compaction') return request.plane === 'preset' ? undefined : {};
+			if (name === 'toolResultPruner') return request.prunerUnreachable === true ? undefined : {};
 			if (name === 'configEditor') {
 				if (request.editorMissing === true) return undefined;
 				return {
-					entries: () => [request.withoutRow === true ? undefined : row, { options: { id: 'llm-pi-ai', config: { providers: { lc: { models: [{ id: '/models/q.gguf' }] } } } } }].filter(Boolean),
+					entries: () => [
+						request.withoutRow === true ? undefined : row,
+						request.withoutPrunerRow === true ? undefined : prunerRow,
+						{ options: { id: 'llm-pi-ai', config: { providers: { lc: { models: [{ id: '/models/q.gguf' }] } } } } }
+					].filter(Boolean),
 					edit: async (entry, change) => {
 						if (request.editFails === true) throw new Error('the document moved under the draft');
 						const next = change(entry.options.config ?? {}, {});
@@ -302,4 +308,51 @@ test('an inventory that is not ready yet is a deferral, not a reported failure',
 	} finally {
 		process.stderr.write = original;
 	}
+});
+
+test('prunerThresholdChars writes the pruner row alongside the compaction row', async () => {
+	const ctx = stubContext();
+	const applied = await tuneCompactionAtRuntime(ctx, resolveConfig({ prunerThresholdChars: 32768 }), { agent, signal });
+	assert.equal(applied.result.kind, 'success', applied.result.text);
+	// Both rows on the profile plane are retuned; the pruner is planned first only because its outcome
+	// decides whether anything needs writing at all.
+	assert.deepEqual([...ctx.edits.map((edit) => edit.id)].sort(), ['compaction-basic', 'tool-result-pruner']);
+	const prunerEdit = ctx.edits.find((edit) => edit.id === 'tool-result-pruner');
+	assert.equal(prunerEdit.next.thresholdChars, 32768);
+	assert.equal(prunerEdit.next.headChars, 4096, 'the other pruner keys are preserved');
+	assert.match(applied.result.text, /tool-result-pruner \(thresholdChars 8192 -> 32768\)/);
+	assert.match(applied.result.text, /Retuned compaction-basic .*; tool-result-pruner/);
+
+	// The session record carries both, so an analysis pass can see them together.
+	assert.deepEqual(session.appended.at(-1)?.data.pruner, { thresholdChars: 32768 });
+	assert.equal(session.appended.at(-1)?.type, 'context-trim/tuned');
+});
+
+test('the pruner is left alone by default, and unreachable is a note rather than a failure', async () => {
+	const untouched = stubContext();
+	await tuneCompactionAtRuntime(untouched, resolveConfig({}), { agent, signal });
+	assert.equal(untouched.edits.length, 1, 'only the compaction row is touched by default');
+	assert.doesNotMatch(untouched.edits[0].id, /pruner/);
+
+	// A web profile keeps the pruner inside each session's preset: the grid is absent.
+	const web = stubContext({ prunerUnreachable: true });
+	const result = await tuneCompactionAtRuntime(web, resolveConfig({ prunerThresholdChars: 32768 }), { agent, signal });
+	assert.equal(result.result.kind, 'success', 'the compaction half still succeeded');
+	assert.deepEqual(web.edits.map((edit) => edit.id), ['compaction-basic']);
+	assert.match(result.result.text, /Pruner: not reachable from this plane .*preset.*left alone/s);
+
+	// A profile that declares no pruner row is also a note.
+	const bare = stubContext({ withoutPrunerRow: true });
+	const bareResult = await tuneCompactionAtRuntime(bare, resolveConfig({ prunerThresholdChars: 32768 }), { agent, signal });
+	assert.deepEqual(bare.edits.map((edit) => edit.id), ['compaction-basic']);
+	assert.match(bareResult.result.text, /declares no tool-result-pruner row/);
+
+	// Already at the wanted value: nothing to do, and check mode never writes.
+	const same = stubContext({ prunerConfig: { thresholdChars: 32768 } });
+	await tuneCompactionAtRuntime(same, resolveConfig({ prunerThresholdChars: 32768 }), { agent, signal });
+	assert.equal(same.edits.some((edit) => edit.id === 'tool-result-pruner'), false);
+	const checked = stubContext();
+	const checkRun = await tuneCompactionAtRuntime(checked, resolveConfig({ prunerThresholdChars: 32768 }), { agent, signal, check: true });
+	assert.equal(checked.edits.length, 0, 'check never writes');
+	assert.match(checkRun.result.text, /Pruner: thresholdChars 8192 -> 32768 would change \(check: nothing written\)/);
 });

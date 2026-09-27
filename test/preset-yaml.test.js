@@ -1,13 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-	MARKER_NAMESPACE,
-	extractPluginsFromPatch,
-	renderPresetRow,
-	renderRegistryRow,
-	setEntryConfig,
-	upsertMarkerBlock
-} from '../lib/preset-yaml.js';
+import { MARKER_NAMESPACE, extractPluginsFromPatch, renderPlainConfig, renderPresetRow, renderRegistryRow, setEntryConfig, upsertMarkerBlock } from '../lib/preset-yaml.js';
 
 /**
  * A representative dump of a preset's plugin list — same shape as
@@ -208,4 +201,24 @@ test('renderRegistryRow writes both required keys in either mode', () => {
 	// loader cannot parse the row at all.
 	assert.match(renderRegistryRow({ presetId: 'x' }), /name: '@deepseek-ai\/dsh-agent-preset-registry'/);
 	assert.match(renderPresetRow({ rowId: 'preset-x', presetId: 'x', name: 'n', description: 'd', order: 1, pluginsYaml: '- id: a\n' }), /name: '@deepseek-ai\/dsh-agent-preset'/);
+});
+
+test('a non-compaction row is rendered with its own keys, not compaction\'s', () => {
+	const content = [
+		'plugins:',
+		'  - id: tool-result-pruner',
+		"    name: '@deepseek-ai/dsh-compaction-tool-result-pruner'",
+		'    config:',
+		'      thresholdChars: 8192',
+		'      headChars: 4096',
+		'      tailChars: 1024'
+	].join('\n');
+	const pruneRow = { thresholdChars: 32768, headChars: 4096, tailChars: 1024 };
+	const spliced = setEntryConfig(content, 'tool-result-pruner', pruneRow, renderPlainConfig);
+	assert.match(spliced, /thresholdChars: 32768/u);
+	assert.match(spliced, /headChars: 4096/u);
+	assert.match(spliced, /tailChars: 1024/u);
+	assert.doesNotMatch(spliced, /thresholdRatio|headroomTokens/u, 'compaction keys must not leak into another row');
+	assert.equal(setEntryConfig(spliced, 'tool-result-pruner', pruneRow, renderPlainConfig), spliced, 'idempotent');
+	assert.equal(setEntryConfig(content, 'no-such-row', pruneRow, renderPlainConfig), null);
 });

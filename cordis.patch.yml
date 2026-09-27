@@ -64,6 +64,10 @@
         # enabling one there only adds compaction events (measured: 15 -> 24 on one task). Set true to tune
         # those routes anyway; see the README's "When it does not pay".
         tuneStockDisabledRoutes: false
+        # 0 leaves the tool-result pruner alone. A positive value also writes that row's thresholdChars
+        # (dsh's default is 8192) so one whole-file read is not clipped away — the lever that matters on a
+        # small window. Web profiles keep the pruner inside each session's preset: the plugin reports that.
+        prunerThresholdChars: 0
         # ── preset tuning (used by the `/trim preset` command) ──────────────
         # Fraction of each routed model's window at which the GENERATED preset
         # makes compaction fire. This only writes that preset's compaction-basic
