@@ -5,6 +5,19 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-09-28
+
+### Fixed
+
+- **`/trim preset` now also writes the preset's pruner threshold.** It cloned the preset and spliced only
+  `compaction-basic`, so a preset generated for a web profile kept `tool-result-pruner.thresholdChars` at dsh's
+  stock 8192 — and in a web profile that row is the *only* place the pruner can be configured, because the
+  host-plane copy is `disabled: true`. A generated preset therefore still clipped every whole-file read, which is
+  exactly what a small-window route needs to keep. The command now splices both rows from the same derivation
+  auto-tune uses (`max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins), honours
+  `prunerThresholdChars: 0` as an opt-out, reports a preset that declares no pruner row instead of failing, and
+  names the value in the generated preset's description.
+
 ## [0.3.7] - 2026-09-28
 
 ### Fixed
@@ -466,7 +479,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.7...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.8...HEAD
+[0.3.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.4...v0.3.5

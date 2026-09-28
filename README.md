@@ -299,7 +299,13 @@ need. Verified state, by feature:
 
 What the ❌ entries mean in practice:
 
-- **`/trim preset`** needs the preset plane (`agentPresets`), the config-editor service and `profileContext.patchPath`.
+- **`/trim preset` writes the pruner too.** It splices both rows of the preset it clones: `compaction-basic`'s trigger
+and `tool-result-pruner`'s `thresholdChars`, the latter from the same derivation auto-tune uses
+(`max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins). That matters in a web
+profile, where the host-plane rows are disabled and the preset is the only place the pruner can be configured — a
+generated preset that left `thresholdChars` at 8192 would keep clipping every whole-file read.
+
+**`/trim preset`** needs the preset plane (`agentPresets`), the config-editor service and `profileContext.patchPath`.
   Every package behind those — `dsh-agent-preset-registry`, `dsh-config-editor` — first appears at **0.1.7-alpha.1**, so
   an older harness gets "this profile composes no agent-preset registry" instead of a half-working command. Nothing else
   depends on them: the command lives in its own module, imported only when it runs.

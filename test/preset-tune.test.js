@@ -271,3 +271,65 @@ test('an unregistered, broken or unwritable default is refused with a reason', a
 		}
 	}
 });
+
+/** A preset document that already carries the pruner row a web preset has. */
+const PRUNER_ROW = `
+- id: tool-result-pruner
+  name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+  config:
+    thresholdChars: 8192
+    headChars: 4096
+    tailChars: 1024
+`;
+
+const WITH_PRUNER = () => ({ standard: BASE_PLUGINS + PRUNER_ROW, ptc: BASE_PLUGINS + PRUNER_ROW });
+
+test('the generated preset also carries a derived pruner threshold', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-preset-pruner-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		const { result } = await tuneCompactionPreset(stubContext({ patchPath, documents: WITH_PRUNER() }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal
+		});
+		assert.equal(result.kind, 'success', result.text);
+		assert.match(result.text, /Pruner: tool-result-pruner thresholdChars -> 32768 \(auto from the routed windows/);
+		// The report truncates the row; the patch on disk is the artefact that matters.
+		const written = await readFile(patchPath, 'utf8');
+		assert.match(written, /- id: tool-result-pruner/);
+		assert.match(written, /thresholdChars: 32768/);
+		assert.match(written, /headChars: 4096/);
+		assert.doesNotMatch(written, /thresholdChars: 8192/, 'the stock clip threshold must be replaced');
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('prunerThresholdChars = 0 generates the compaction row and leaves the pruner alone', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-preset-pruner-off-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		const { result } = await tuneCompactionPreset(
+			stubContext({ patchPath, documents: WITH_PRUNER() }),
+			resolveConfig({ prunerThresholdChars: 0 }),
+			{ agent: stubAgent(), signal: new AbortController().signal }
+		);
+		assert.equal(result.kind, 'success', result.text);
+		assert.match(result.text, /Pruner: left alone/);
+		const written = await readFile(patchPath, 'utf8');
+		assert.match(written, /thresholdChars: 8192/, 'the stock value stays untouched');
+		assert.doesNotMatch(written, /thresholdChars: 32768/);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('a preset that declares no pruner row is reported, not failed', async () => {
+	const { result } = await tuneCompactionPreset(stubContext(), CONFIG(), {
+		agent: stubAgent(),
+		signal: new AbortController().signal,
+		check: true
+	});
+	assert.equal(result.kind, 'success', result.text);
+	assert.match(result.text, /declares no tool-result-pruner row/);
+});
