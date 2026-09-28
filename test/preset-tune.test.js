@@ -356,3 +356,35 @@ test('inplace mode writes an override for the base preset id, not a new preset',
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test('the preset name comes from the registry, so re-running cannot stack the suffix', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-preset-name-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		const first = await tuneCompactionPreset(stubContext({ patchPath, documents: WITH_PRUNER() }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal,
+			inplace: true
+		});
+		assert.equal(first.result.kind, 'success', first.result.text);
+		// Inplace keeps the registry's name: the user picks the same preset as before.
+		const written = await readFile(patchPath, 'utf8');
+		assert.match(written, /^    name: '?Standard'?$/mu, 'inplace keeps the base name');
+		assert.doesNotMatch(written, /\(tuned/u, 'no tuning suffix in inplace mode');
+
+		// Insert mode adds exactly one suffix, even when the document itself was written by an earlier run.
+		const second = await mkdtemp(join(tmpdir(), 'trim-preset-name2-'));
+		const secondPath = join(second, 'cordis.patch.yml');
+		await tuneCompactionPreset(stubContext({ patchPath: secondPath, documents: WITH_PRUNER() }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal
+		});
+		const inserted = await readFile(secondPath, 'utf8');
+		// Insert mode nests the row inside `- insert:`, so assert on content and count, not on indentation.
+		assert.match(inserted, /name: '?Standard \(tuned 80%\)'?/u);
+		assert.equal((inserted.match(/\(tuned/gu) ?? []).length, 1, 'the suffix appears exactly once');
+		await rm(second, { recursive: true, force: true });
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});

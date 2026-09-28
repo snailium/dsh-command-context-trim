@@ -42,3 +42,11 @@ test('an override row addresses the preset by id and carries every config key', 
 	assert.match(row, /^    plugins:$/mu);
 	assert.match(row, /^      - id: persona$/mu);
 });
+
+test('the shipped bundle derives the pruner threshold instead of pinning the old opt-out', async () => {
+	// Regression: 0.3.2's patch pinned `prunerThresholdChars: 0`, which is an explicit opt-out. It stayed behind
+	// after 0.3.5 made the value derivable, so every install of our own bundle kept the pruner at stock 8192 —
+	// found live, in an isolated instance whose preset row still said thresholdChars: 8192.
+	const text = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
+	assert.match(text, /prunerThresholdChars: auto/u, 'the bundle must not pin the old opt-out');
+});

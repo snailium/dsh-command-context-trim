@@ -5,6 +5,21 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-09-28
+
+### Fixed
+
+- **Our own bundle patch pinned `prunerThresholdChars: 0`.** That value is an explicit opt-out, so from 0.3.5 —
+  when the threshold became derivable — every install of our own bundle kept the pruner at dsh's stock 8192 while
+  the code and the README said `auto` was the default. Found live in an isolated web instance: the row the command
+  had just written still carried `thresholdChars: 8192`. The bundle now says `auto`, and a regression test reads the
+  shipped patch and refuses the old value.
+- **A generated preset's name no longer stacks its suffix.** The display name was read back from the document being
+  edited, which in `inplace` mode is our own previous row — so a second run produced
+  `standard (tuned 80%) (tuned 80%)`. The name now comes from the registry's metadata, and `inplace` keeps the
+  original name (the user picks the same preset as before, so renaming it is noise); the tuning details stay in the
+  description.
+
 ## [0.3.9] - 2026-09-28
 
 ### Added
@@ -494,7 +509,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.9...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.10...HEAD
+[0.3.10]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.6...v0.3.7
