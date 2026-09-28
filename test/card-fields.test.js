@@ -52,3 +52,9 @@ test('the container entrypoint can turn on the small-window lever with one varia
 		Object.assign(process.env, saved);
 	}
 });
+
+test('the loader schema admits the auto pruner setting the card can now type', () => {
+	// The resolver has accepted 'auto' since 0.3.5; the loader schema (and so the card) must express it too.
+	assert.equal(resolveConfig({ prunerThresholdChars: 'auto' }).prunerThresholdChars, 'auto');
+	assert.equal(resolveConfig({ prunerThresholdChars: '0' }).prunerThresholdChars, 0);
+});

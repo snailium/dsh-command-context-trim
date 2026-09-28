@@ -141,7 +141,7 @@ test('the component returns the summary one-liner and the five-field form body',
 	assert.equal(tree.children[1].props.onReset(), 'compactionRoute');
 	assert.equal(tree.children[2].props.numeric, undefined, 'the auto-tune switch is text: the card types true/false');
 	assert.equal(tree.children[3].props.hint, 'tuneStockDisabledRoutesHint');
-	assert.equal(tree.children[4].props.numeric, true, 'the pruner threshold takes digits');
+	assert.equal(tree.children[4].props.numeric, undefined, "the pruner field takes 'auto' as well as digits");
 	assert.deepEqual(tree.children[4].props.onEdit('32768'), ['prunerThresholdChars', '32768']);
 	assert.equal(typeof tree.props.onSave, 'function');
 	assert.equal(typeof tree.props.onDiscard, 'function');

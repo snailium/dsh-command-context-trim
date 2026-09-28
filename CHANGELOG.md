@@ -5,6 +5,22 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-09-28
+
+### Fixed
+
+- **The settings card can now express `'auto'` for the pruner threshold.** 0.3.5 taught the resolver to accept
+  `'auto'`, but the loader schema still declared `z.number()` and the card rendered the field as a numeric control,
+  so the new default was unreachable from the UI. The schema is a union now and the field is free text, with the
+  hint spelling out `auto` / `0` / a number.
+
+  Found while diagnosing a production web session: its profile patch still carried `prunerThresholdChars: 0` — an
+  explicit opt-out written by the 0.3.3 card, whose default was `0` — so even where retuning is reachable the
+  pruner would have been left alone. (The main cause in that session was the plane, not the value: a web profile
+  keeps compaction and the pruner inside each session's agent-preset realm, which is why the plugin reports
+  "not reachable from this plane" and why `/trim preset` — which writes the `preset-<id>` override row — is the
+  tool for web.)
+
 ## [0.3.6] - 2026-09-28
 
 ### Documented
@@ -450,7 +466,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.7...HEAD
+[0.3.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.3...v0.3.4
