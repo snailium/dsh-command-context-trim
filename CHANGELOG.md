@@ -5,6 +5,28 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-09-28
+
+### Changed
+
+- **The tool-result pruner threshold is derived by auto-tune instead of configured.** dsh ships a fixed 8192
+  characters, which is safe on a large window and harmful on a small one: an agent that reads a source file gets
+  8.5-29.5 KB back, so stock clips exactly the unit it needs and the agent re-reads it. The tuner now computes
+
+  ```
+  max(8192, min(32768, 2 x (contextWindow - maxTokens)))
+  ```
+
+  -- one result may hold up to half the route's message budget, capped at 32 KB, floored at stock so it can never
+  clip more aggressively than dsh does -- and takes the smallest value across the routed windows. `'auto'` is the
+  default; `0` is an explicit opt-out; a positive integer overrides both. `DSH_TRIM_PRUNER=auto|0|<n>` is the
+  environment form, so a container is back to a single variable.
+
+  Why it matters on a small route: at or below 64K the compaction side is deliberately left at stock (enabling the
+  pressure trigger there is what made one 40K run slower), which leaves the pruner as the only lever -- and the
+  first tuned Bonsai 2 run had it switched off, so 17 prune events still clipped every read over 8192 characters
+  while three files were read three times each.
+
 ## [0.3.4] - 2026-09-28
 
 ### Added
@@ -419,7 +441,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.1...v0.3.2
