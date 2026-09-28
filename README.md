@@ -299,7 +299,15 @@ need. Verified state, by feature:
 
 What the ❌ entries mean in practice:
 
-- **`/trim preset` writes the pruner too.** It splices both rows of the preset it clones: `compaction-basic`'s trigger
+- **`/trim preset inplace` removes the picking step.** Instead of declaring `<base>-tuned` it writes an override row
+for the base preset's own id (`- id: preset-standard` + a complete `config:`), which is exactly how the Web editor
+persists a preset edit. New sessions keep using `standard` and pick the tuning up with no picker interaction, and the
+same row doubles as the repair for a session whose custom preset disappeared in an upgrade — recreating the id is
+what makes that session loadable again (its history does not depend on the plugin list, only its future turns do).
+The cost is that the shipped preset's own plugin list is shadowed until the row is removed, and `dsh` overwrites the
+shipped copy on every upgrade.
+
+**`/trim preset` writes the pruner too.** It splices both rows of the preset it clones: `compaction-basic`'s trigger
 and `tool-result-pruner`'s `thresholdChars`, the latter from the same derivation auto-tune uses
 (`max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins). That matters in a web
 profile, where the host-plane rows are disabled and the preset is the only place the pruner can be configured — a

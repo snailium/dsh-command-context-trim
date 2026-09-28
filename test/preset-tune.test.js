@@ -333,3 +333,26 @@ test('a preset that declares no pruner row is reported, not failed', async () =>
 	assert.equal(result.kind, 'success', result.text);
 	assert.match(result.text, /declares no tool-result-pruner row/);
 });
+
+test('inplace mode writes an override for the base preset id, not a new preset', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-preset-inplace-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		const { result } = await tuneCompactionPreset(stubContext({ patchPath, documents: WITH_PRUNER() }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal,
+			inplace: true
+		});
+		assert.equal(result.kind, 'success', result.text);
+		assert.match(result.text, /overriding preset "standard" in place/u);
+		const written = await readFile(patchPath, 'utf8');
+		assert.match(written, /^- id: preset-standard$/mu, 'the shipped row is addressed by id');
+		assert.doesNotMatch(written, /insert:/u, 'no new row is declared');
+		assert.doesNotMatch(written, /standard-tuned/u, 'no new preset id appears');
+		assert.match(written, /id: standard$/mu);
+		assert.match(written, /thresholdChars: 32768/u, 'the derived pruner threshold rides along');
+		assert.match(result.text, /New sessions keep using preset "standard"/u, 'the shadowing caveat is reported');
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});

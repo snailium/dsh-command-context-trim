@@ -5,6 +5,21 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-09-28
+
+### Added
+
+- **`/trim preset inplace` overrides the base preset instead of declaring a new one.** It writes
+  `- id: preset-<base>` with a complete `config:` (the same shape the Web editor persists), so new sessions keep
+  using the existing preset id and pick the tuning up without anyone choosing anything — and the same row is the
+  repair for a session whose custom preset vanished in a dsh upgrade, because recreating the id is what makes that
+  session loadable again. Patch layers replace a row's `config:` wholesale, so the block carries every key; the
+  shipped preset's plugin list is shadowed until the row is removed, which the report says out loud.
+
+  Why it matters: a web profile keeps compaction and the pruner inside each session's preset, the preset is locked
+  once a session starts, and `resolve()` has no fallback — so a lost preset id makes a session unresumable, and a
+  new id means a picker interaction every time. Overriding in place addresses all three at once.
+
 ## [0.3.8] - 2026-09-28
 
 ### Fixed
@@ -479,7 +494,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.8...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.9...HEAD
+[0.3.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.5...v0.3.6
