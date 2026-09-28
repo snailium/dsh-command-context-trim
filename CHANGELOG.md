@@ -5,6 +5,17 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-09-28
+
+### Documented
+
+- **How an already-started conversation gets new tuning: fork it.** A running session is bound to the preset realm
+  it composed at its first turn, so editing the preset does not reach it; a fork composes a fresh realm from the
+  preset's current definition while carrying the parent's history (`/trim preset inplace` → restart → fork). Recorded
+  with the mechanism (`retain()` returns the generation the current definition activated) and the boundaries (new
+  session id, the fork is locked too, it needs a completed turn in the parent). This is why `/trim apply` — a live
+  `recompose()` past the lock — stays unimplemented: the fork does the same job with documented behaviour.
+
 ## [0.3.11] - 2026-09-28
 
 ### Fixed
@@ -518,7 +529,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.11...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.12...HEAD
+[0.3.12]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.8...v0.3.9

@@ -307,6 +307,14 @@ what makes that session loadable again (its history does not depend on the plugi
 The cost is that the shipped preset's own plugin list is shadowed until the row is removed, and `dsh` overwrites the
 shipped copy on every upgrade.
 
+**A conversation that has already started gets the tuning by being forked.** A running session is bound to the
+preset realm it composed at its first turn, so editing the preset afterwards cannot reach it — but a fork composes a
+fresh realm from the preset's *current* definition while carrying the parent's history. The workflow is
+`/trim preset inplace` → (restart, so the composition certainly re-read the patch) → fork → keep working. The fork
+has a new session id and is locked like any started session (it inherits the parent's `turn/start` events), which is
+harmless because it already runs the tuned values. This is also why `/trim apply` — recomposing a live session past
+the lock — is deliberately *not* implemented: the fork does the same job with documented behaviour only.
+
 **`/trim preset` writes the pruner too.** It splices both rows of the preset it clones: `compaction-basic`'s trigger
 and `tool-result-pruner`'s `thresholdChars`, the latter from the same derivation auto-tune uses
 (`max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins). That matters in a web
