@@ -471,3 +471,39 @@ test('rescue refuses an id that still exists, and a donor that does not', async 
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test('check reports route coverage and flags an uncovered small window', async () => {
+	const { result } = await tuneCompactionPreset(stubContext(), CONFIG(), {
+		agent: stubAgent(),
+		signal: new AbortController().signal,
+		check: true
+	});
+	assert.match(result.text, /coverage: 4 route\(s\) configured, 0 covered by this preset, 4 not covered/u);
+	// bonsai-8gb is 40960/8192 => message budget 32768 <= 65536, so an uncovered policy is the dangerous case.
+	assert.match(result.text, /uncovered SMALL route bonsai-8gb\//u);
+	assert.match(result.text, /enables the pressure trigger/u);
+
+	// A preset that already carries every policy reports full coverage and no warning.
+	const coveredDoc = WITH_PRUNER().standard.replace(
+		'- id: tool-result-pruner',
+		[
+			'modelPolicies:',
+			'  - provider: b70-sycl',
+			'    model: /models/q.gguf',
+			'  - provider: b70-smg',
+			'    model: /models/q.gguf',
+			'  - provider: bonsai-8gb',
+			'    model: /models/mtp-lean.gguf',
+			'  - provider: opencode-go',
+			'    model: deepseek-v4.1-flash',
+			'- id: tool-result-pruner'
+		].join('\n')
+	);
+	const full = await tuneCompactionPreset(
+		stubContext({ documents: { standard: coveredDoc, ptc: coveredDoc } }),
+		CONFIG(),
+		{ agent: stubAgent(), signal: new AbortController().signal, check: true }
+	);
+	assert.match(full.result.text, /coverage: 4 route\(s\) configured, 4 covered by this preset\./u);
+	assert.doesNotMatch(full.result.text, /uncovered SMALL/u);
+});

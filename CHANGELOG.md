@@ -5,6 +5,26 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-28
+
+### Added
+
+- **The preset definition is kept in sync.** A web profile keeps compaction inside each session's preset realm, so no
+  host-plane write reaches a running session — but the *definition* can be kept current, which is what makes the next
+  fork, new session, or restart already tuned after a model is added to the profile. With `autoTuneCompaction` on, the
+  plugin entry registers one `agent/created` listener that syncs the session's preset id at most once per process
+  (never blocking a turn, never throwing). It is a separate trigger from the auto-retune path on purpose: that path
+  reports one line per distinct failure and a file write does not belong in its middle.
+- **`/trim preset check` reports route coverage.** It counts the configured routes the current preset covers, and
+  warns explicitly about any **uncovered route at or below a 64K message budget** — the one case where inheriting the
+  tuned top level is wrong, because it *enables* the pressure trigger (measured at 15 -> 24 compactions). Large
+  uncovered routes are fine: they inherit the tuned ratio-first shape.
+
+### Fixed
+
+- **`persistBlock` no longer rewrites an identical block.** The sync re-runs on every boot, and a byte-identical
+  write churned the profile patch and its backup for nothing.
+
 ## [0.4.0] - 2026-09-28
 
 ### Added
@@ -542,7 +562,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.12...v0.4.0
 [0.3.12]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.10...v0.3.11

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { registerAutoTune, findCompactionRow, mergeTunedConfig, tuneCompactionAtRuntime } from '../lib/tune-runtime.js';
+import { findCompactionRow, mergeTunedConfig, registerAutoTune, registerPresetSync, tuneCompactionAtRuntime } from '../lib/tune-runtime.js';
 import { resolveConfig } from '../lib/config.js';
 
 const CATALOG = { lc: { '/models/q.gguf': { contextWindow: 131072, defaultMaxTokens: 16384 } } };
@@ -17,6 +17,7 @@ function stubContext(request = {}) {
 		edits,
 		listeners,
 		get(name) {
+			if (name === 'agentPresets') return request.presetRegistryMissing === true ? undefined : request.presetRegistry;
 			if (name === 'compaction') return request.plane === 'preset' ? undefined : {};
 			if (name === 'toolResultPruner') return request.prunerUnreachable === true ? undefined : {};
 			if (name === 'configEditor') {
@@ -255,7 +256,8 @@ test('a repeated identical failure is reported once, not once per request', asyn
 	};
 	try {
 		// A web-like context: the guard refuses every time, and agent/request triggers every time.
-		const ctx = stubContext({ plane: 'preset' });
+		const ctx = /* No preset registry: this case is about the refusal path, so the auto-sync cannot take over. */
+		stubContext({ plane: 'preset', presetRegistryMissing: true });
 		const auto = registerAutoTune(ctx, { autoTuneCompaction: true, prunerThresholdChars: 0 });
 		const next = () => 'downstream';
 		for (let i = 0; i < 4; i += 1) ctx.listeners.get('agent/request')({ agent }, next);
@@ -366,4 +368,22 @@ test('the pruner is derived by default, 0 opts out, and unreachable is a note ra
 	const checkRun = await tuneCompactionAtRuntime(checked, resolveConfig({ prunerThresholdChars: 32768 }), { agent, signal, check: true });
 	assert.equal(checked.edits.length, 0, 'check never writes');
 	assert.match(checkRun.result.text, /Pruner: thresholdChars 8192 -> 32768 would change \(check: nothing written\)/);
+});
+
+test('registerPresetSync registers one listener and never throws', async () => {
+	// The behavioural half of this lives in an isolated web instance (it needs a real preset registry). Here we pin
+	// the contract the plugin entry relies on: one listener, a disposer, and no escaping error on the first agent.
+	const listeners = new Map();
+	const ctx = stubContext({ plane: 'preset' });
+	ctx.on = (event, handler) => {
+		listeners.set(event, handler);
+		return () => listeners.delete(event);
+	};
+	const dispose = registerPresetSync(ctx, CONFIG());
+	assert.equal(typeof dispose, 'function');
+	assert.deepEqual([...listeners.keys()], ['agent/created']);
+	await listeners.get('agent/created')({ agent });
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	dispose();
+	assert.equal(listeners.size, 0, 'the disposer unhooks the listener');
 });

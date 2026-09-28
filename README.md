@@ -299,7 +299,15 @@ need. Verified state, by feature:
 
 What the ❌ entries mean in practice:
 
-- **`/trim rescue <id>` brings a session back whose preset id disappeared.** `resolve()` has no fallback, so a session
+- **Auto-sync keeps the preset definition current, and `check` says what is missing.** With `autoTuneCompaction` on,
+a web profile cannot retune a running session (compaction lives inside its preset realm), so the plugin does the one
+thing that plane allows: on the first new session it keeps the preset *definition* in sync — one write per preset id
+per process, never blocking a turn — which is what makes the next fork, new session, or restart already correct when
+a model is added to the profile. `/trim preset check` reports the gap directly: how many configured routes the
+current preset covers, and an explicit warning for any **uncovered route at or below 64K**, where inheriting the
+tuned top level would *enable* the pressure trigger — the configuration measured slower (15 -> 24 compactions).
+
+**`/trim rescue <id>` brings a session back whose preset id disappeared.** `resolve()` has no fallback, so a session
 bound to a preset that an upgrade (or a manual cleanup) removed can be neither resumed nor forked — and the lock plus
 `assertPresetUnchanged` mean it can never be re-pointed at a different id. The repair is to make the id resolvable
 again, which is also the moment to decide what it *is*: `/trim rescue <id>` clones a donor preset (`--from <preset>`,
