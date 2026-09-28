@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { renderRouteList, tuneCompactionPreset } from '../lib/preset-tune.js';
+import { renderRouteList, rescuePreset, tuneCompactionPreset } from '../lib/preset-tune.js';
 import { resolveConfig } from '../lib/config.js';
 
 /** The plugin list a base preset would dump, with the compaction group inside. */
@@ -403,6 +403,70 @@ test('a legacy tuning suffix in the registry name is normalized away', async () 
 		const written = await readFile(patchPath, 'utf8');
 		assert.match(written, /^    name: Standard$/mu, 'inplace lands on the clean base name');
 		assert.equal((written.match(/\(tuned/gu) ?? []).length, 0, 'no suffix survives in inplace mode');
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('rescue recreates a missing preset id and can tune it on the way in', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-rescue-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		const { result } = await rescuePreset(stubContext({ patchPath, documents: WITH_PRUNER() }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal,
+			missingId: 'standard-lost'
+		});
+		assert.equal(result.kind, 'success', result.text);
+		assert.match(result.text, /Rescue row for preset "standard-lost" from donor "standard"/u);
+		assert.match(result.text, /history is unaffected/u, 'the donor-composition caveat is stated');
+		const written = await readFile(patchPath, 'utf8');
+		assert.match(written, /^- id: preset-standard-lost$/mu, 'the row addresses the missing id');
+		assert.match(written, /^    id: standard-lost$/mu, 'and config.id matches it, which is what resolve() looks up');
+		assert.doesNotMatch(written, /standard-tuned/u);
+		assert.match(written, /thresholdChars: 32768/u, 'the tuned pruner threshold rides along by default');
+
+		// --untuned keeps the donor's own plugin list untouched.
+		const plainDir = await mkdtemp(join(tmpdir(), 'trim-rescue-plain-'));
+		const plainPath = join(plainDir, 'cordis.patch.yml');
+		const plain = await rescuePreset(stubContext({ patchPath: plainPath, documents: WITH_PRUNER() }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal,
+			missingId: 'standard-gone',
+			untuned: true
+		});
+		assert.equal(plain.result.kind, 'success', plain.result.text);
+		assert.match(plain.result.text, /--untuned/u);
+		const plainWritten = await readFile(plainPath, 'utf8');
+		assert.doesNotMatch(plainWritten, /thresholdChars: 32768/u, 'untuned must not splice our pruner value');
+		await rm(plainDir, { recursive: true, force: true });
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('rescue refuses an id that still exists, and a donor that does not', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-rescue-refuse-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		const existing = await rescuePreset(stubContext({ patchPath }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal,
+			missingId: 'standard'
+		});
+		assert.equal(existing.result.kind, 'error', existing.result.text);
+		assert.match(existing.result.text, /still exists/u);
+		await assert.rejects(stat(patchPath), /ENOENT/, 'a refusal must not write anything');
+
+		const badDonor = await rescuePreset(stubContext({ patchPath }), CONFIG(), {
+			agent: stubAgent(),
+			signal: new AbortController().signal,
+			missingId: 'standard-lost',
+			donorId: 'nope'
+		});
+		assert.equal(badDonor.result.kind, 'error', badDonor.result.text);
+		assert.match(badDonor.result.text, /Donor preset "nope" does not exist/u);
+		assert.match(badDonor.result.text, /standard/u, 'the error names the available donors');
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}

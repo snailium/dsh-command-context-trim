@@ -5,6 +5,19 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
+### Added
+
+- **`/trim rescue <id> [--from <donor>] [--untuned]`.** A session whose preset id no longer resolves can be neither
+  resumed nor forked (`resolve()` has no fallback), and it can never be re-pointed at another id — the preset is
+  locked and `assertPresetUnchanged` refuses a different one. The only repair is to make the id resolvable again,
+  and that is also the moment to decide what it is: this command clones a donor preset (default `standard`) into an
+  override row for the missing id, tuned like `/trim preset inplace` unless `--untuned` is passed. It refuses an id
+  that still exists, names the available donors when `--from` is wrong, and states the one thing a clone cannot
+  restore — the donor's plugin list replaces the lost one, so future turns get the donor composition even though the
+  history is unaffected.
+
 ## [0.3.12] - 2026-09-28
 
 ### Documented
@@ -529,7 +542,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.12...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.12...v0.4.0
 [0.3.12]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.9...v0.3.10

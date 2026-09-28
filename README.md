@@ -299,7 +299,16 @@ need. Verified state, by feature:
 
 What the ❌ entries mean in practice:
 
-- **`/trim preset inplace` removes the picking step.** Instead of declaring `<base>-tuned` it writes an override row
+- **`/trim rescue <id>` brings a session back whose preset id disappeared.** `resolve()` has no fallback, so a session
+bound to a preset that an upgrade (or a manual cleanup) removed can be neither resumed nor forked — and the lock plus
+`assertPresetUnchanged` mean it can never be re-pointed at a different id. The repair is to make the id resolvable
+again, which is also the moment to decide what it *is*: `/trim rescue <id>` clones a donor preset (`--from <preset>`,
+default `standard`) and, unless `--untuned` is given, applies the same tuning `/trim preset inplace` would
+(compaction trigger plus the derived pruner threshold). The report says out loud what the clone cannot restore: the
+session's history does not depend on the plugin list, but its future turns do, so a preset that mounted extra tools
+will not get them back from a donor. It refuses an id that still exists.
+
+**`/trim preset inplace` removes the picking step.** Instead of declaring `<base>-tuned` it writes an override row
 for the base preset's own id (`- id: preset-standard` + a complete `config:`), which is exactly how the Web editor
 persists a preset edit. New sessions keep using `standard` and pick the tuning up with no picker interaction, and the
 same row doubles as the repair for a session whose custom preset disappeared in an upgrade — recreating the id is
