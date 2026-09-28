@@ -5,6 +5,20 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-27
+
+### Added
+
+- **The tuner's three switches are on the settings card.** `autoTuneCompaction`, `tuneStockDisabledRoutes` and
+  `prunerThresholdChars` join `compactionTargetRatio` and `compactionRoute` as volatile fields, so the three rules
+  the tuner encodes — retune at runtime, leave a stock-disabled route alone unless asked, and stop the pruner from
+  clipping a whole-file read — are reachable from the Plugins page instead of only from a patch layer.
+
+  One honest limitation: dsh 0.1.7's primitives ship no switch control. `SettingsValueField` is a text control and
+  `numeric` only hints the keypad, so the two booleans are text fields and the resolution side accepts what a card
+  can type — `true`/`false`/`yes`/`no`/`on`/`off`/`1`/`0` for the flags, digits for the threshold. An empty draft
+  still means "no override" and falls back to the default.
+
 ## [0.3.2] - 2026-09-27
 
 ### Added
@@ -393,7 +407,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.2.3...v0.3.0
