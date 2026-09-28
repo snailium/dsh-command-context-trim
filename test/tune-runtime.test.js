@@ -64,7 +64,7 @@ function stubSession() {
 const session = stubSession();
 const agent = { session };
 const signal = new AbortController().signal;
-const CONFIG = () => resolveConfig({});
+const CONFIG = () => resolveConfig({ prunerThresholdChars: 0 });
 
 test('the row is only tunable where compaction is on this plane', () => {
 	assert.match(findCompactionRow(stubContext({ editorMissing: true })).error, /no configuration editor/u);
@@ -131,7 +131,7 @@ test('auto tune writes immediately, without waiting for an idle moment', async (
 	assert.equal(off.listeners.has('agent/created'), false, 'switched off means no listener at all');
 
 	const on = stubContext();
-	const auto = registerAutoTune(on, { autoTuneCompaction: true });
+	const auto = registerAutoTune(on, { autoTuneCompaction: true, prunerThresholdChars: 0 });
 	assert.deepEqual([...on.listeners.keys()].sort(), ['agent/created', 'agent/request', 'agent/status', 'session/event']);
 	assert.equal(typeof auto.pending, 'function', 'the write is not awaited on the request path, so it exposes a handle');
 
@@ -189,11 +189,11 @@ test('a retune is reported on stderr, and a no-op check is not', async () => {
 	};
 	try {
 		const ctx = stubContext();
-		registerAutoTune(ctx, { autoTuneCompaction: true });
-		const auto = registerAutoTune(stubContext(), { autoTuneCompaction: true });
+		registerAutoTune(ctx, { autoTuneCompaction: true, prunerThresholdChars: 0 });
+		const auto = registerAutoTune(stubContext(), { autoTuneCompaction: true, prunerThresholdChars: 0 });
 
 		const fresh = stubContext();
-		const handle = registerAutoTune(fresh, { autoTuneCompaction: true });
+		const handle = registerAutoTune(fresh, { autoTuneCompaction: true, prunerThresholdChars: 0 });
 		await handle.pending();
 		// First flush happens through agent/created in the other stubs; here check the no-op path.
 		await fresh.listeners.get('agent/created')({ agent });
@@ -256,7 +256,7 @@ test('a repeated identical failure is reported once, not once per request', asyn
 	try {
 		// A web-like context: the guard refuses every time, and agent/request triggers every time.
 		const ctx = stubContext({ plane: 'preset' });
-		const auto = registerAutoTune(ctx, { autoTuneCompaction: true });
+		const auto = registerAutoTune(ctx, { autoTuneCompaction: true, prunerThresholdChars: 0 });
 		const next = () => 'downstream';
 		for (let i = 0; i < 4; i += 1) ctx.listeners.get('agent/request')({ agent }, next);
 		await auto.pending();
@@ -265,7 +265,7 @@ test('a repeated identical failure is reported once, not once per request', asyn
 
 		// A later success clears the memory, so a subsequent failure would be reported again.
 		const healthy = stubContext();
-		registerAutoTune(healthy, { autoTuneCompaction: true });
+		registerAutoTune(healthy, { autoTuneCompaction: true, prunerThresholdChars: 0 });
 		await healthy.listeners.get('agent/created')({ agent });
 		assert.equal(healthy.edits.length, 1, 'a healthy context still tunes (and writes)');
 	} finally {
@@ -301,7 +301,7 @@ test('an inventory that is not ready yet is a deferral, not a reported failure',
 		return original(chunk, ...rest);
 	};
 	try {
-		const auto = registerAutoTune(bare, { autoTuneCompaction: true });
+		const auto = registerAutoTune(bare, { autoTuneCompaction: true, prunerThresholdChars: 0 });
 		void auto;
 		await bareListeners.get('agent/created')({ agent });
 		assert.equal(written.length, 0, `expected silence, got ${JSON.stringify(written)}`);
@@ -328,10 +328,21 @@ test('prunerThresholdChars writes the pruner row alongside the compaction row', 
 	assert.equal(session.appended.at(-1)?.type, 'context-trim/tuned');
 });
 
-test('the pruner is left alone by default, and unreachable is a note rather than a failure', async () => {
+test('the pruner is derived by default, 0 opts out, and unreachable is a note rather than a failure', async () => {
+	// The default is `auto`: the tuner derives the pruner value from the routed window. The stub route is
+	// 131072/16384, so the formula gives max(8192, min(32768, 2*(131072-16384))) = 32768.
+	const derived = stubContext();
+	const derivedRun = await tuneCompactionAtRuntime(derived, resolveConfig({}), { agent, signal });
+	const derivedEdit = derived.edits.find((edit) => edit.id === 'tool-result-pruner');
+	assert.ok(derivedEdit, 'auto writes the pruner row');
+	assert.equal(derivedEdit.next.thresholdChars, 32768);
+	assert.match(derivedRun.result.text, /Pruner: thresholdChars 8192 -> 32768 \(auto:/u);
+	assert.deepEqual(session.appended.at(-1)?.data.pruner, { thresholdChars: 32768 });
+
+	// `0` is the explicit opt-out.
 	const untouched = stubContext();
-	await tuneCompactionAtRuntime(untouched, resolveConfig({}), { agent, signal });
-	assert.equal(untouched.edits.length, 1, 'only the compaction row is touched by default');
+	await tuneCompactionAtRuntime(untouched, resolveConfig({ prunerThresholdChars: 0 }), { agent, signal });
+	assert.equal(untouched.edits.length, 1, 'an explicit 0 leaves the pruner alone');
 	assert.doesNotMatch(untouched.edits[0].id, /pruner/);
 
 	// A web profile keeps the pruner inside each session's preset: the grid is absent.
