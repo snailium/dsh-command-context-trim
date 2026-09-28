@@ -5,6 +5,15 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-09-28
+
+### Fixed
+
+- **A tuning suffix already present in the registry's name is normalized away.** 0.3.10 stopped *stacking* the
+  suffix but the name still came from the registry, which — after one 0.3.9 run — reported
+  `standard (tuned 80%) (tuned 80%)` as the base name, so the junk survived every later run. The next run now
+  strips a trailing `(tuned N%)` before composing the name, which cleans up rows written by the broken versions.
+
 ## [0.3.10] - 2026-09-28
 
 ### Fixed
@@ -509,7 +518,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.10...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.7...v0.3.8

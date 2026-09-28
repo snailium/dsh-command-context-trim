@@ -388,3 +388,22 @@ test('the preset name comes from the registry, so re-running cannot stack the su
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test('a legacy tuning suffix in the registry name is normalized away', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'trim-preset-legacy-'));
+	try {
+		const patchPath = join(directory, 'cordis.patch.yml');
+		// 0.3.9 could leave this behind; the registry then reports it as the base name.
+		const presets = [{ id: 'standard', name: 'Standard (tuned 80%) (tuned 80%)', order: 1, isDefault: true }];
+		await tuneCompactionPreset(
+			stubContext({ patchPath, presets, documents: WITH_PRUNER() }),
+			CONFIG(),
+			{ agent: stubAgent(), signal: new AbortController().signal, inplace: true }
+		);
+		const written = await readFile(patchPath, 'utf8');
+		assert.match(written, /^    name: Standard$/mu, 'inplace lands on the clean base name');
+		assert.equal((written.match(/\(tuned/gu) ?? []).length, 0, 'no suffix survives in inplace mode');
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
