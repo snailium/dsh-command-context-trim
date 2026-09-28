@@ -28,3 +28,25 @@ test('the pruner threshold accepts typed digits and still bounds them', () => {
 	assert.throws(() => resolveConfig({ prunerThresholdChars: 'abc' }), /must be an integer/u);
 	assert.throws(() => resolveConfig({ prunerThresholdChars: -1 }), /non-negative/u);
 });
+
+test('the container entrypoint can turn on the small-window lever with one variable', () => {
+	const saved = { ...process.env };
+	try {
+		process.env.DSH_TRIM_PRUNER = '32768';
+		assert.equal(resolveConfig({}).prunerThresholdChars, 32768, 'the environment turns the pruner lever on');
+		// The environment wins over the profile, exactly like DSH_TRIM_AUTO_TUNE.
+		assert.equal(resolveConfig({ prunerThresholdChars: 8192 }).prunerThresholdChars, 32768);
+		delete process.env.DSH_TRIM_PRUNER;
+		assert.equal(resolveConfig({ prunerThresholdChars: 8192 }).prunerThresholdChars, 8192, 'unset falls back to the profile');
+
+		process.env.DSH_TRIM_TUNE_STOCK_DISABLED = '1';
+		assert.equal(resolveConfig({}).tuneStockDisabledRoutes, true);
+		delete process.env.DSH_TRIM_TUNE_STOCK_DISABLED;
+
+		process.env.DSH_TRIM_PRUNER = 'abc';
+		assert.throws(() => resolveConfig({}), /DSH_TRIM_PRUNER must be a non-negative integer/u);
+	} finally {
+		for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
+		Object.assign(process.env, saved);
+	}
+});

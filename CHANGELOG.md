@@ -5,6 +5,18 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-09-28
+
+### Added
+
+- **`DSH_TRIM_PRUNER` and `DSH_TRIM_TUNE_STOCK_DISABLED`.** The two levers a small-window route needs are now
+  settable from the environment, like `DSH_TRIM_AUTO_TUNE`, so a container entrypoint can set them once instead of
+  patching every profile it boots. This closes the gap the first tuned Bonsai 2 run exposed: the image shipped
+  `DSH_TRIM_AUTO_TUNE=1` alone, so `prunerThresholdChars` stayed at its default `0`, the pruner was never retuned,
+  and every `read` over 8192 characters was still clipped to a head and a tail — 17 prune events, no compaction and
+  no overflow, three reads each of `main.go`, `websec.go` and `infer.go`. On a route at or below 64K the compaction
+  side is *deliberately* left at stock, which makes the pruner threshold the only lever there is.
+
 ## [0.3.3] - 2026-09-27
 
 ### Added
@@ -407,7 +419,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.0...v0.3.1
