@@ -605,3 +605,99 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 ## License
 
 MIT
+
+---
+
+## The arithmetic
+
+Every number this plugin computes, with the defaults it starts from. Token-to-character work uses dsh's own
+`CHARS_PER_TOKEN = 4` (`@deepseek-ai/dsh-token-meter`).
+
+### 1. The trim budget (what `/trim` fits the surface into)
+
+```
+usable  = contextWindow − reserveOutputTokens          # reserveOutputTokens: 8192
+budget  = max(1, floor(usable × targetRatio))          # targetRatio: 0.9
+retain  = max(minTailTokens,                          # minTailTokens: 2048
+              floor(contextWindow × retainRatio))      # retainRatio: 0.16
+```
+
+`/trim <budget>` (e.g. `/trim 32k`) replaces `budget` outright; `budgetCeiling` then takes
+`min(budget, ceiling)` when the automatic path has to come in under a specific number.
+
+### 2. What the planner compares
+
+```
+surfaceTokens  = Σ node.heuristicTokens                       # the token meter's price per surface node
+envelopeTokens = measurement.totalTokens − measurement.surfaceTokens   # tool schemas and other fixed request data
+totalTokens    = envelopeTokens + surfaceTokens
+fits           ⇔ totalTokens ≤ budget
+need           = totalTokens − budget
+projectedTotal = totalTokens − freedTokens                    # after eliding a span
+```
+
+An elided span is replaced by one marker whose price is `markerTokens + markerSlackTokens`
+(`markerSlackTokens: 64`), and the planner re-runs once when the marker's real numbers make it
+more expensive than the provisional estimate. Leading nodes are protected by `protectHeadNodes`
+(`1`), the newest human prompt is never elided, and tool-call/result pairs are only cut where the
+pairing stays balanced (`allowTailTrim: true`).
+
+### 3. The compaction trigger (what auto-tune and `/trim preset` write)
+
+Mirrors `@deepseek-ai/dsh-compaction-basic`'s `resolveCompactSpec` as read from dsh 0.1.7-rc.2:
+
+```
+reservedCompletion = the routed request's maxTokens      # the output reserve, read from request/header
+messageBudget      = contextWindow − reservedCompletion
+pressureBudget     = messageBudget − headroomTokens      # dsh's stock headroomTokens: 65536
+thresholdTokens    = floor(min(contextWindow × thresholdRatio, pressureBudget))
+retainTokens       = retainTokens ?? floor(messageBudget × retainRatio)   # compaction's own retainRatio: 0.16
+```
+
+Two consequences, both of which the tuner exists to handle:
+
+- `thresholdRatio` alone does not decide the trigger. The headroom term does whenever
+  `headroomTokens > messageBudget − contextWindow × thresholdRatio`, so a 131072-token route with dsh's stock
+  65536 compacts at **37.5 %**, not the configured 80 %.
+- `headroomTokens` doubles as the default `maxTokens` for compaction's summarization call, so a generated
+  preset states `maxTokens` explicitly.
+
+The headroom that lets the ratio decide, and the gate it produces:
+
+```
+headroomForRatio = max(0, messageBudget − floor(contextWindow × thresholdRatio))
+tunedGate        = floor(min(contextWindow × thresholdRatio, messageBudget − headroomForRatio))
+                 = floor(contextWindow × thresholdRatio)        # whenever headroomForRatio > 0
+```
+
+A route whose `messageBudget ≤ 65536` has `pressureBudget ≤ 0`: dsh then has **no pressure trigger at all**,
+and the tuner leaves it that way (that is what `tuneStockDisabledRoutes` / `DSH_TRIM_TUNE_STOCK_DISABLED` would
+change, and it measured slower on one 40K task: 15 → 24 compactions).
+
+### 4. The tool-result pruner threshold (derived by auto-tune since 0.3.5)
+
+```
+prunerThresholdChars = max(8192, min(32768, 2 × (contextWindow − maxTokens)))
+```
+
+i.e. one tool result may hold up to **half the route's message budget**, capped at 32 KB and floored at dsh's
+stock 8192 so it can never clip more aggressively than stock does. With several routes the smallest value wins.
+`'auto'` (the default) derives it, `0` leaves the pruner alone, a positive integer overrides it, and
+`DSH_TRIM_PRUNER=auto|0|<n>` is the environment form. The plugin's own in-place slim (`preferInPlacePrune: true`)
+delegates to dsh's pruner service, so this one value governs both paths; when that service is absent it uses
+`pruneThresholdChars: 8192` with `pruneHeadChars: 4096` / `pruneTailChars: 1024` itself.
+
+### 5. Worked examples
+
+| Route | `W` | `maxTokens` | stock gate | tuned gate | pruner threshold |
+|---|---:|---:|---:|---:|---:|
+| Bonsai 2 (small) | 40,960 | 8,192 | none (pressureBudget −32,768) | none — left at stock | `max(8192, min(32768, 2×32768))` = **32,768** |
+| Bonsai 2 (first tuned run) | 40,960 | 16,384 | none (pressureBudget −40,960) | none — left at stock | **32,768** |
+| Our 128K route | 131,072 | 16,384 | `floor(min(104857, 49152))` = **49,152** (37.5 %) | **104,857** (80 %) | **32,768** |
+| deepseek-official | 1,000,000 | 256,000 | `floor(min(800000, 678464))` = **678,464** (67.8 %) | **744,000** (74.4 %) | **32,768** |
+
+### 6. Automatic trimming
+
+`autoTrim: true` retries a failed request by shrinking its budget:
+`nextCeiling = max(1, floor(failingTotal × (1 − autoTrimShrink)))` with `autoTrimShrink: 0.5` and at most
+`maxAutoTrimRetries: 3` attempts before it gives up and reports what it measured.

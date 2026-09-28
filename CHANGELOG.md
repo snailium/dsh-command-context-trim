@@ -5,6 +5,15 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-09-28
+
+### Documented
+
+- **Every formula the plugin computes is now in the README**, under *The arithmetic*: the trim budget and retained
+  tail, what the planner compares and how a marker is priced, dsh's compaction trigger (stock and tuned, with the
+  headroom that lets the ratio decide), the derived pruner threshold, the automatic-shrink ladder, and a worked
+  table for the four routes we have measured (Bonsai 2 at 40,960, our 131,072 route, and deepseek-official at 1M).
+
 ## [0.3.5] - 2026-09-28
 
 ### Changed
@@ -441,7 +450,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.2...v0.3.3
