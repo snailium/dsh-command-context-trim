@@ -88,7 +88,12 @@ test('the card follows the 0.1.7 contract: summary one-liner, shared body, no ow
 	assert.match(clientSource, /exports\.apply = apply/u);
 	assert.equal(/^\s*(import|export)\s/mu.test(clientSource), false, 'no ES module syntax in a served client bundle');
 	assert.match(clientSource, /if \(props\.view === 'summary'\) return t\('description'\)/u);
-	assert.match(clientSource, /name: 'plugins\.item'/u);
+	// The row slot, keyed `<package>#<row id>` — the contract for a third-party bundle. `plugins.item` is the
+	// official slot: a card parked there still renders, but mislabelled under "Official" and, measured on 0.2.0,
+	// refused on save. The key fails silently if wrong, so all three pieces are asserted.
+	assert.match(clientSource, /name: 'plugins\.row\.config'/u);
+	assert.match(clientSource, /key: ROW_CONFIG_KEY/u);
+	assert.match(clientSource, /\$\{PACKAGE\}#\$\{ENTRY_ID\}/u);
 	assert.match(clientSource, /h\(\s*SettingsForm,/u);
 	assert.match(clientSource, /numeric: true/u, 'the ratio is a numeric field');
 	assert.match(clientSource, /settingsTextField\('compactionRoute'\)/u);

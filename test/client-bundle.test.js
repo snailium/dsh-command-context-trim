@@ -144,10 +144,13 @@ test('the bundle registers into plugins.item behind the served namespace only', 
 	exports.apply(context);
 	assert.deepEqual(scopes, ['context-trim'], 'the card binds the loader entry id');
 	assert.equal(registered.length, 1);
-	assert.equal(registered[0].options.name, 'plugins.item');
-	assert.equal(registered[0].options.id, 'context-trim');
+	// The row slot, keyed `<package>#<row id>`. This is the whole reason a third-party bundle does NOT use
+	// `plugins.item`: that slot belongs to the official settings pages, and a card parked there renders under
+	// "Official" while its Save is refused (measured on 0.2.0).
+	assert.equal(registered[0].options.name, 'plugins.row.config');
+	assert.equal(registered[0].options.key, 'dsh-command-context-trim#context-trim');
 	assert.equal(registered[0].options.locale, 'settings.context-trim');
-	assert.equal(registered[0].options.label(), 'title');
+	assert.equal(registered[0].options.label, undefined, 'a keyed slot takes its heading from the bundle patch');
 	assert.deepEqual(calls.model.fields.map((field) => [field.name, field.numeric]), [
 		['compactionTargetRatio', true],
 		['compactionRoute', false],
@@ -260,4 +263,14 @@ test('the card\'s default mirror matches the plugin\'s own defaults', async () =
 	// `compactionRoute` has no default at all; the card shows an empty field for it.
 	assert.equal(exported.compactionRoute, '');
 	assert.equal(DEFAULTS.compactionRoute, undefined, 'the route is deliberately unset by default');
+});
+
+test('the row-slot key is pinned, because a wrong key fails silently', async () => {
+	// `plugins.row.config` is a keyed slot: a mismatched key simply never matches a row, so the Configure button
+	// never appears and the page renders nothing — no error, anywhere. Pin the key instead of trusting it.
+	const registration = (await loadBundle()).factory(require_stub());
+	assert.equal(registration.SLOT_NAME, 'plugins.row.config');
+	assert.equal(registration.PACKAGE, 'dsh-command-context-trim', 'the key starts with the package name');
+	assert.equal(registration.ENTRY_ID, 'context-trim', 'the key ends with the row id, which is the namespace');
+	assert.equal(registration.ROW_CONFIG_KEY, `${registration.PACKAGE}#${registration.ENTRY_ID}`);
 });

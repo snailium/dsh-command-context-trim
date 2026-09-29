@@ -5,6 +5,31 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-09-28
+
+### Fixed
+
+- **The settings card was registered into the wrong slot.** It registered into `plugins.item`, which the slot
+  contract reserves for the **official** settings pages ("OCCUPIED by the official settings pages, one companion
+  package per host-plane namespace; a bundle's configuration belongs in `plugins.bundle.config` or
+  `plugins.row.config`"). A third-party bundle's card parked there still renders — which is why this went unnoticed —
+  but it appears under **Official**, mislabelled as a built-in plugin, instead of on its own bundle page. It now
+  registers into **`plugins.row.config`**, keyed `dsh-command-context-trim#context-trim`, which is the slot the page
+  hands a form to and the one whose presence gives the row its **Configure** button. Verified in an isolated 0.2.0
+  instance: the card is gone from the Official list, the bundle page's row shows `Configure dsh-command-context-trim`,
+  and the form renders in the row view. The keyed `key` is pinned in the test suite, because a wrong key fails
+  silently (no error, no log — just a missing button).
+
+### Known (0.2.0 only)
+
+- **Save is still refused on 0.2.0, and the reason is now known.** The row slot hands the component
+  `form = { state: snapshot, mutate }` — a **snapshot and a fenced write**, not a scope: it has no `subscribe()` and no
+  `getSnapshot()`, so it cannot back a `SettingsFormModel`. The card keeps the model path it drives from
+  `configForms.get('context-trim')`, which renders and saves correctly on 0.1.7; making 0.2.0 save means adopting the
+  hand-rolled write path the slot contract implies (stage edits locally, then one `form.mutate(ops, revision)`), which
+  the primitives' `SettingsForm`/`SettingsValueField` can still render. Until that lands, configure this plugin through
+  its profile patch row on 0.2.0 — which is what the web workflow does anyway (`/trim preset inplace`).
+
 ## [0.4.8] - 2026-09-28
 
 ### Fixed (documentation)
@@ -673,7 +698,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.8...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.9...HEAD
+[0.4.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.5...v0.4.6
