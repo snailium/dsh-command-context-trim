@@ -1,145 +1,33 @@
 # dsh-command-context-trim
 
-[English →](README.md)
+[English →](README.md) — **the English README is the canonical and maintained document.**
 
-给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加一个**不调用任何模型**的 `/trim` 命令：
-把对话里最旧、最不重要的一段上下文裁掉，让会话能切到**窗口更小的模型**上继续跑。
+本文件曾经是一份完整的中文翻译，但它已**停止维护**：它跟不上 0.3.9 之后的变化（`/trim preset inplace`、
+`/trim rescue`、路由覆盖率检查、fork 才是给已开始的会话换参数的正规路径、web 与 headless 的差异）。
+为了不留下**看起来完整其实是错的**说明，这里只保留最短的现状摘要；细节一律以 `README.md` 为准。
 
-## 为什么需要它
+## 这个插件做什么
 
-把长会话从云端大窗口模型切到本地小窗口模型后，下一次请求会超出新模型的窗口。常规做法是切换前先 `/compact`，
-但 compaction 的本质是**摘要**：它必须让摘要请求本身也塞进（已经变小的）窗口，而摘要的输入正是那段要压缩的历史——
-于是它常常因为和原请求同样的原因失败。DSH 内置的溢出自动恢复同理：它也是用 routed 模型去做摘要，本地窗口太小就一样失败。
+给 DSH 增加一个**不调用任何模型**的 `/trim`：在真正溢出之前，把最旧、最不重要的上下文裁掉，让会话能用更小的
+窗口继续跑；同时可以按路由调优 DSH 自己的 compaction 触发点与工具结果裁剪阈值。
 
-`/trim` 完全不依赖模型：它先按目标模型重新测算当前请求，选出**最旧的、工具调用/结果配对平衡的**一段，刚好释放到预算
-以内，再用一条极短的占位消息把这段遮蔽掉。两次同步 append，零次 LLM 调用——所以它在“所有请求都失败”的场景下照样能用。
-
-## 安装
-
-```bash
-dsh plugin --profile web add dsh-command-context-trim          # 从 npm 安装
-dsh plugin --profile web add file:/path/to/dsh-command-context-trim   # 从源码
-```
-
-包内声明了 `dsh.bundle.patch`，`dsh plugin add` 会自动把它加进 profile 的 `dsh.profile.bundles`，并组合其 insert 行
-（插件 id `context-trim`）。重启对应 profile 后，斜杠菜单里会出现 `/trim`。
-
-## 用法
+## 当前命令（完整说明见 README.md）
 
 ```
-/trim                       按当前/待切换模型的窗口裁到预算内
-/trim check                 只报告计划，不修改任何东西
-/trim 32k                   指定 32768 token 预算
-/trim lc:/models/qwen.gguf  按指定 route 声明的窗口裁
+/trim                                  # 手工裁剪当前会话（不调用模型）
+/trim check                            # 只报告计划，不修改
+/trim preset inplace                   # 把调优写进**当前 preset 自己的 id**（无需换 preset）
+/trim preset check                     # 报告生成行 + 路由覆盖率（新增模型后用它判断该不该重跑）
+/trim rescue <id> [--from <donor>]     # 用同 id 重建丢失的 preset，让旧会话能重新加载
 ```
 
-典型流程：切到本地小模型 → 执行 `/trim`（也可以在切换前执行：命令会读取最新的 `model/selection` 意图）→ 继续对话。
+## 三条最容易被误解的事实
 
-## 实现要点
+1. **已开始的会话换不了 preset**（它绑在启动时组合的那个 realm 上）。要让它吃到新参数，**fork 它**：preset id
+   不变，但 realm 会按**当前定义**重新组合。
+2. **web profile 里自动调优不会触发**：会话的 agent 在各自的 preset 域里创建，其生命周期事件到不了 host 平面。
+   web 的正确用法是手动的：`inplace` → 用 `check` 判断是否过期 → fork 或新开会话。
+3. **preset id 是持久接口**：升级时请**同 id 覆盖**，不要新建 `-tuned` 后缀；否则引用旧 id 的会话会变成孤儿
+   （那时用 `rescue` 救）。
 
-一次裁剪 = 两次**紧邻**的 append：
-
-1. `compaction/prune` —— token meter 的 **shadow-price 记账**。meter 的持久化投影是 O(1) 的，无法为被替换的范围重新计价，
-   所以替换事件前必须有一条声明被遮蔽范围精确价格的计量事件，否则投影按 0 增量记账，上下文占用显示会漂移。
-2. `user/message` + `surfaceOp:{op:'replace',start,end}` —— 替换本体，`sourceEventSeqs` 覆盖全部被遮蔽节点。
-
-`user/message` 是**空闲态唯二合法的 surface 事件类型**：`assistant/message` 需要 open step，`tool/result` 替换需要 open turn，
-而“回合之间”正是用户需要裁剪的时刻。
-
-由此带来的性质：
-
-- **人类记录不受影响**：替换是 model-only，transcript 只读 append 来源事件；原始内容完整保留在持久化日志里，可审计、可人工恢复。
-- **绝不切断工具调用/结果配对**：切点由 `@deepseek-ai/dsh-compaction` 的 `toolPairingBalancedBefore/After` 决定。
-- **与其它机制互斥**：命令在 `agent.runMaintenance()` 内执行（非 idle 直接失败），不会与回合、`/compact`、自动压缩交错；
-  存在未闭合的 `compaction/start` 时也会拒绝执行。
-
-## 撞墙自动 trim
-
-`autoTrim`（默认开）让同一套"无模型调用"的裁剪在无人值守时发生：用 **`prepend`** 注册的 `agent/request-error`
-监听器在 `CONTEXT_WINDOW_EXCEEDED` 时裁剪并请求重试。
-
-```
-请求撞墙
-  ├─ prepend: context-trim   → 裁剪一段，零模型调用 → retry       ← 能腾出空间时由它解决
-  └─ next(): compaction-basic → 先 prune 工具结果再摘要（LLM）     ← 只在 trim 无能为力时
-```
-
-为什么 `prepend` 是关键：`agent/request-error` 是 Cordis 的 **waterfall**，compaction 也在同一事件上注册了自己的
-摘要恢复；Cordis 按注册顺序存放监听器，`{ prepend: true }` 会 `unshift` 到最前，所以即使 compaction 是稍后在
-agent-preset 的 isolate realm 里挂载的（web profile 里就是这样），本插件依然先执行。不调用 `next()` 即否决该次
-摘要。
-
-**范围刻意收窄**：只有 `CONTEXT_WINDOW_EXCEEDED` 才触发；其它请求错误、普通阈值 compaction（`agent/pre-step` 压力路径）、
-`/compact`、工具结果 pruner **一律不碰**（有测试锁定注册的监听器集合）。
-
-每轮溢出 episode 的额度由 `maxAutoTrimRetries`（默认 3）限制，收到完成的 assistant 消息或 agent 空闲即重置。
-
-**便宜的那一步先做**：撞墙时先把超长 tool result **原地瘦身**（head + 标记 + tail，与 DSH 自带 pruner 同一变换），不够才整段裁剪：
-
-```
-请求被拒 → tool result 原地瘦身 → 整段裁剪一段 → compaction（prune + summarize）
-```
-
-官方 `toolResultPruner` 服务在插件上下文里可见时（0.1.2、以及 compaction 仍在宿主层的 0.1.5 headless）直接委托它；不可见时（0.1.5 web profile 把 pruner 藏在 agent-preset isolate realm 里）自己做同样的变换。瘦身保留节点、tool call 与其之前的前缀；写入的标记是 `[... tool result middle trimmed to fit the context window ...]`，与 DSH 自己的 `[... tool result middle pruned ...]` 可区分。`preferInPlacePrune: false` 可跳过这一步。
-
-**声明窗口与实际不符时，退化成"多裁一点"而不是"回合死掉"**：第一次仍按声明的 `contextWindow` 定目标；若重试又被拒（说明声明已被事实推翻），此后同一 episode 内改为按 `failingRequestTokens × (1 − autoTrimShrink)` 重定目标——默认**减半**刚被拒的那次请求，几何收敛，并打印告警指出该去改 `settings.yaml` 的哪个设置。窗口声明正确时第一次就成功，自适应路径根本不会触发。根治办法仍是配置本身：`contextWindow: 32768` 时首次裁剪目标约 22k，直接命中。
-代价如实说：自动 trim 是**丢弃**最旧一段而不是摘要它——在小窗口下这正是要点，但被丢的内容只会变成一条占位标记。
-`/compact` 仍在，原文也仍在会话日志里。
-
-## 保护集与选段策略
-
-保护与**优先级**（永远从最旧处开始裁，按"损失最小"逐档尝试）：
-
-1. 留在保留尾部之外，且**保留最后一条**（先按配置的保留量；实在放不下才逐级放宽保留量）；
-2. 可以进入保留尾部，但仍**保留最后一条**；
-3. **最后一档**才允许把最后一条纳入——通常就是当前这步的 assistant tool-call 与它的 tool-result（两者只能成对移除）。
-
-另外：开头 `protectHeadNodes`（默认 1，即任务声明）与**最新的那条 `user/message`（你当前的指令）是硬屏障**——永不裁剪、也不被跨越。把最后一条按位置硬保护会卡死最常见的溢出形态（实测探针：`largest balanced span frees ~4 of the ~4631 tokens needed`）。`allowTailTrim: false` 时搜索在第 1 档后结束：保留尾部成为硬边界，最后一条永不丢弃。
-在保护集之间采用**最旧优先、够用即止**：从最旧的平衡切点开始，只增长到刚好释放够 token。
-
-## 兼容性
-
-| Harness | 状态 |
-|---|---|
-| 0.1.2-rc.1（`latest`） | ✅ 全套测试通过 |
-| 0.1.5-rc.2（`next`） | ✅ 全套测试通过 |
-
-两处 0.1.5 变更已在不做版本号判断的前提下兼容：
-
-- **替换标记改名**：`{op:'replace', start, end}` → `{op:'replace', startSeq, endSeq}`。插件首次使用时用一个一次性游离 session 探测本机 harness 接受哪种形状，再按该形状写入。
-- **system prompt 从 header 搬到了 surface**（0.1.5 作为 `system/message` 节点 0）。system 节点被当作**屏障**：永不裁剪、任何被裁区间都不得跨越它；同时 `protectHeadNodes` 只统计非屏障节点，因此"保护头部"保护的仍是**用户的任务声明**，而不是 system prompt。
-
-因此"固定请求开销"的含义变为工具 schema + 其它非 surface 请求数据（0.1.2 上还包含 system prompt）；裁剪预算本身不受影响，因为它来自 token meter 的总量。
-
-## 配置
-
-在 profile patch 的 `context-trim` 行上覆盖（`cordis.patch.yml` 里列出了全部默认值）：
-
-`targetRatio`(0.9)、`reserveOutputTokens`(8192)、`retainRatio`(0.16)/`retainTokens`、`minTailTokens`(2048)、
-`protectHeadNodes`(1)、`allowTailTrim`(true)、`markerSlackTokens`(64)。
-
-预算公式：`budget = floor((contextWindow - reserveOutputTokens) * targetRatio)`。
-
-## 局限
-
-- 它是**丢弃**而不是摘要。需要“浓缩保留”时用 `/compact`；两者互补（先 `/trim` 会让随后的 `/compact` 更省、更易成功）。
-- **无法缩减固定开销**（system prompt + 工具 schema 不在 surface 上）；如果固定开销本身超预算，命令会明确报错而不是假装成功。
-- v1 **没有 `/untrim`**：把旧内容重新变回 surface 需要 append `assistant`/`tool` 事件，而那只在 open turn 内合法。
-- 计价使用 token meter 的启发式估算（与 `/compact`、GUI 上下文条一致），与提供商真实 usage 略有偏差。
-
-## 开发与验证
-
-```bash
-npm install            # 本插件依赖的 harness 契约已固定为 devDependencies
-npm test               # node --test
-npm run link:harness   # 也可改为从本地 dsh 安装的依赖闭包解析 @deepseek-ai
-```
-
-已验证：34 个测试全部通过（选段算法、参数解析、真实 Session 上的 surface 改写与日志重放、插件命令注册与端到端裁剪，以及用**真实 `ctx.tokenMeter`** 验证「实测降幅 == 声明的 shadow price」和「新进程重放裁剪后日志得到完全一致的总量」）；
-隔离 `DSH_HOME` 安装后 dependency 与 bundle 层均正确 reconcile；`dsh --dump-config` 中出现 `context-trim` 行；profile 启动无加载错误。
-CI 在 Node 22/24 × harness 0.1.2-rc.1/`next`（当前解析到 0.1.5-rc.3）四腿矩阵上跑同一套 61 项测试；发布通过 `.github/workflows/publish.yml`（手动 `workflow_dispatch`）。
-npm 0.2.2（撞墙自动 trim：先原地瘦身、再整段裁剪、最后才摘要），并已在隔离 profile 里从 registry 安装验证；尚未执行：Web GUI 里的真实小窗口端到端验证（mock provider 与隔离实例已就绪）。
-
-## License
-
-MIT
+调优参数的推导公式、各路由的样例值、以及完整的验证状态，见 [README.md](README.md)。

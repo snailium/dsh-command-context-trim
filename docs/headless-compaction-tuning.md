@@ -140,6 +140,19 @@ route with `maxTokens 16384` cannot reach 80 % without a headroom that lets the 
 `{ provider, model, thresholdRatio: 0.8, headroomTokens: 9831 }` for it. Routes whose reserve makes the
 target unreachable are reported on stderr as capped instead of being written silently.
 
+## 6d. The pruner threshold, and where this route differs from web
+
+Auto-tuning writes the compaction trigger **and** the tool-result pruner's clip threshold. The pruner value is derived
+per route — `max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins — and
+`prunerThresholdChars` defaults to `auto`; an integer overrides it and `0` opts out. This is the lever that matters on
+a small window, where dsh's stock `8192` clips a whole-file read.
+
+This document is about the **headless / tui** route, where the host plane owns the agents and the automatic paths
+fire. A **web** profile is different: session agents are created inside preset realms, their lifecycle events never
+reach the host plane, and the plugin cannot retune a running session — so web uses the manual workflow
+(`/trim preset inplace`, `/trim preset check` for staleness and uncovered small routes, then a fork or a new session).
+See the README's *Which route to use* and the `dsh-compaction-config` skill.
+
 ## 7. Why not a preset (the route that does *not* work here)
 
 `agent-preset-registry` and the shipped `preset-*` rows are inserted by `dsh-web-app`, and only the

@@ -5,6 +5,26 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-09-28
+
+### Fixed (documentation)
+
+- **The configuration table still gave `prunerThresholdChars` as `0`.** That was 0.3.2's value and it is an explicit
+  opt-out, so the table taught the exact setting that disabled the derivation 0.3.5 introduced — the same stale value
+  that a live isolated instance exposed in our own bundle. The row now says `auto`, with the formula
+  (`max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins), the integer override and the
+  `0` opt-out.
+- **The `/trim preset` command list was missing `inplace` and `default`**, and had no example of what `check` prints.
+  It now lists every form and shows the coverage report, including the *uncovered route at or below 64K* warning, next
+  to the sentence that makes it useful: re-run `inplace` when `check` reports a gap. `/trim rescue` is listed too.
+- **The verification table said 103 tests and stopped at 0.1.7.** It now says 149 and carries the 0.3.9-0.4.4
+  evidence: `inplace` and `rescue` verified in an isolated instance, the derived pruner threshold landing in the
+  written row, the measured fact that a web profile logs the boot refusal and nothing per session, and the Bonsai 2
+  headless before/after (`thresholdChars: 32768`, `compaction/prune` 17 -> 2).
+- **`docs/headless-compaction-tuning.md`** gained the pruner-threshold section and the cross-reference to the web
+  manual workflow, and **`README.zh.md`** was replaced by a short, honest page: the English README is canonical, and
+  the stale full translation (last in step with 0.3.8) is gone rather than looking complete.
+
 ## [0.4.4] - 2026-09-28
 
 ### Documented
@@ -596,7 +616,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.1...v0.4.2
