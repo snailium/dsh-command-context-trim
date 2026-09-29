@@ -5,6 +5,15 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-28
+
+### Fixed
+
+- **A skipped sync says why, at least once.** 0.4.2 made failures visible, but a skip (no preset registry reachable
+  from this plane, or an id already synced in this process) still only reached the debug log — so a live web instance
+  showed nothing at all about the auto-sync, which is indistinguishable from the bug 0.4.2 fixed. The first skip of a
+  process now goes to stderr too, the rest stay at info level, and a test asserts the exact line.
+
 ## [0.4.2] - 2026-09-28
 
 ### Fixed
@@ -574,7 +583,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.12...v0.4.0

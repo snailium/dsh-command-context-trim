@@ -422,6 +422,19 @@ test('the sync reports its outcome, and never swallows a failure', async () => {
 		const text = captured.join('');
 		assert.match(text, /auto preset sync(?: failed)?:/u, `expected a sync line, got ${JSON.stringify(text)}`);
 		assert.match(text, /registry refused the read/u, 'the failure reason must survive into the log');
+
+		// And a *skip* is not silent either: without a registry the reason must still reach the log once.
+		captured.length = 0;
+		const bare = stubContext({ plane: 'preset', presetRegistryMissing: true });
+		const bareListeners = new Map();
+		bare.on = (event, handler) => {
+			bareListeners.set(event, handler);
+			return () => bareListeners.delete(event);
+		};
+		registerPresetSync(bare, CONFIG());
+		await bareListeners.get('agent/created')({ agent });
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		assert.match(captured.join(''), /auto preset sync: skipped \(this profile composes no preset registry\)/u);
 	} finally {
 		process.stderr.write = original;
 	}
