@@ -5,6 +5,18 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-28
+
+### Fixed
+
+- **A throw from the preset registry made the auto-sync a silent no-op.** The composer lookup
+  (`registry.composedPreset(agent.ctx)`) sat *outside* the guarded region, so a throw rejected the handler's promise and
+  nothing was logged at all — which is exactly how "my new model is still untuned and nothing says why" looks. The
+  whole sync is now guarded, and its outcome is reported: `preset "<id>" updated` on success, and
+  `auto preset sync failed: <reason>` with the reason preserved (the error text's last line, matching the convention
+  the auto-retune line already uses). Normal skips — no registry in this profile, or an id already synced in this
+  process — stay quiet.
+
 ## [0.4.1] - 2026-09-28
 
 ### Added
@@ -562,7 +574,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.12...v0.4.0
 [0.3.12]: https://github.com/snailium/dsh-command-context-trim/compare/v0.3.11...v0.3.12

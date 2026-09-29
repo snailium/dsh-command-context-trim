@@ -387,3 +387,85 @@ test('registerPresetSync registers one listener and never throws', async () => {
 	dispose();
 	assert.equal(listeners.size, 0, 'the disposer unhooks the listener');
 });
+
+test('the sync reports its outcome, and never swallows a failure', async () => {
+	// Both halves matter: the line is how a user learns the definition was kept current, and a swallowed failure is
+	// how a "why is my new model still untuned?" question becomes unanswerable.
+	const captured = [];
+	const original = process.stderr.write.bind(process.stderr);
+	process.stderr.write = (chunk) => {
+		captured.push(String(chunk));
+		return true;
+	};
+	try {
+		const listeners = new Map();
+		const ctx = stubContext({ plane: 'preset' });
+		ctx.on = (event, handler) => {
+			listeners.set(event, handler);
+			return () => listeners.delete(event);
+		};
+		// A registry that throws when read: the sync must say so rather than look like a no-op.
+		ctx.get = ((base) => (name) =>
+			name === 'agentPresets'
+				? {
+						composedPreset: () => 'standard',
+						remoteExportList: async () => ({ presets: [{ id: 'standard', name: 'Standard', order: 1 }] }),
+						readDocument: async () => {
+							throw new Error('registry refused the read');
+						}
+					}
+				: base(name))(ctx.get);
+		const dispose = registerPresetSync(ctx, CONFIG());
+		await listeners.get('agent/created')({ agent });
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		dispose();
+		const text = captured.join('');
+		assert.match(text, /auto preset sync(?: failed)?:/u, `expected a sync line, got ${JSON.stringify(text)}`);
+		assert.match(text, /registry refused the read/u, 'the failure reason must survive into the log');
+	} finally {
+		process.stderr.write = original;
+	}
+});
+
+test('a throw from the preset registry is reported, not swallowed', async () => {
+	// The composer lookup happens before any read; if it throws and that call sits outside the guarded region, the
+	// whole handler rejects and the user sees nothing at all — which is how a silent no-op looks.
+	const captured = [];
+	const original = process.stderr.write.bind(process.stderr);
+	process.stderr.write = (chunk) => {
+		captured.push(String(chunk));
+		return true;
+	};
+	const unhandled = [];
+	const onUnhandled = (reason) => unhandled.push(String(reason));
+	process.on('unhandledRejection', onUnhandled);
+	try {
+		const listeners = new Map();
+		const ctx = stubContext({ plane: 'preset' });
+		ctx.on = (event, handler) => {
+			listeners.set(event, handler);
+			return () => listeners.delete(event);
+		};
+		ctx.get = ((base) => (name) =>
+			name === 'agentPresets'
+				? {
+						composedPreset: () => {
+							throw new Error('composedPreset exploded');
+						},
+						remoteExportList: async () => ({ presets: [{ id: 'standard', name: 'Standard', order: 1 }] }),
+						readDocument: async () => ({ agentPreset: 'standard', name: 'Standard', content: WITH_COMPACTION })
+					}
+				: base(name))(ctx.get);
+		const dispose = registerPresetSync(ctx, CONFIG());
+		await listeners.get('agent/created')({ agent });
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		dispose();
+		const text = captured.join('');
+		assert.match(text, /auto preset sync(?: failed)?:/u, `expected a sync line, got ${JSON.stringify(text)}`);
+		assert.match(text, /composedPreset exploded/u, 'the thrown reason must survive into the log');
+		assert.deepEqual(unhandled, [], 'the handler must not reject in the background');
+	} finally {
+		process.stderr.write = original;
+		process.off('unhandledRejection', onUnhandled);
+	}
+});
