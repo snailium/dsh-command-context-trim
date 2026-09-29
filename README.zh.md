@@ -2,7 +2,7 @@
 
 [English →](README.md)
 
-<!-- synced-with-readme: 0.4.7 -->
+<!-- synced-with-readme: 0.4.8 -->
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加一个**不调用任何模型**的 `/trim`：
 在真正溢出之前，把对话里最旧、最不重要的一段上下文裁掉，让会话能切到**窗口更小的模型**上继续跑；同时可以按路由
@@ -41,10 +41,15 @@ headroom 直接把触发点**关掉**时（消息预算 ≤ 65536），把它打
 `buildForkSeed` 会把父会话的 `turn/start` 事件复制进子会话（`dsh-session/lib/index.js:884-893`），而 fork 本身要求
 父会话已有一个**完成的 turn**，于是子会话的 `turnBoundary.lastTurn > 0` ⇒ 同样换不了 preset。因此：
 
-- **想要新参数**：`/trim preset inplace` 写好定义，然后 **fork**（或新开会话）—— 子会话 preset **id 不变**，但 realm 会按
-  **当前定义重新组合** ✔；
-- **preset id 是持久接口**：升级/重建时请**同 id 覆盖**，不要新建 `-tuned` 后缀；引用了旧 id 的会话会变成孤儿
-  （既不能 resume 也不能 fork，`resolve()` 没有回退）⇒ 用 `/trim rescue <id>` 以**同 id**重建它。
+- **想要新参数**：让进程**重启**即可 ✔ —— 会话的 preset **id 是粘住的** ✗（它来自会话的 `agentPreset` 投影 ✔，而
+`assertPresetUnchanged` 会拒绝另一个 id ✗），但**该 id 背后的定义在每次 adopt 时都会被重新解析** ✔：
+`createOrAdopt` 与 `resumeObserved` 都会调用 `composeAgent(presetForObservation(observation))` ✔，再把新组合交给
+`agents.resume` ✔，而 `retain(id)` 返回的是**当前定义所激活的那一代** ✔。所以"改 preset 时没有在运行"的会话，
+**只要 resume 就会吃到调优** ✔ —— **不需要 fork** ✗。
+
+只有一种情形需要 fork ✔：**改定义时会话仍在运行** ✗。活着的 agent 绑在它当初组合的那一代上 ✔，那份绑定会让旧 realm 保持
+存活 ✗，所以改动到不了它 ✗ ⇒ 这时才 fork（或等下一次重启 ✔）。fork 是**新 session id** ✗、且自身也被锁 ✗（继承父会话的
+`turn/start` ✔）—— 但这对它无害 ✔，因为它已经在跑调优后的值 ✔。
 
 ### 该用哪条路线
 

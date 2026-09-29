@@ -331,13 +331,17 @@ what makes that session loadable again (its history does not depend on the plugi
 The cost is that the shipped preset's own plugin list is shadowed until the row is removed, and `dsh` overwrites the
 shipped copy on every upgrade.
 
-**A conversation that has already started gets the tuning by being forked.** A running session is bound to the
-preset realm it composed at its first turn, so editing the preset afterwards cannot reach it — but a fork composes a
-fresh realm from the preset's *current* definition while carrying the parent's history. The workflow is
-`/trim preset inplace` → (restart, so the composition certainly re-read the patch) → fork → keep working. The fork
-has a new session id and is locked like any started session (it inherits the parent's `turn/start` events), which is
-harmless because it already runs the tuned values. This is also why `/trim apply` — recomposing a live session past
-the lock — is deliberately *not* implemented: the fork does the same job with documented behaviour only.
+**A conversation that has already started gets the tuning when the process restarts.** The preset **id** is
+sticky — it comes from the session's `agentPreset` projection, and `assertPresetUnchanged` refuses a different one —
+but the **definition behind that id is re-resolved on every adopt**: `createOrAdopt` and `resumeObserved` both call
+`composeAgent(presetForObservation(observation))` and hand the fresh composition to `agents.resume`, and `retain(id)`
+returns the generation the *current* definition activated. So a session that was not running while you edited the
+preset picks the tuning up by simply being resumed — no fork involved.
+
+A fork earns its place in exactly one case: the session is **live** when the definition changes. A live agent is bound
+to the generation it composed, and that binding keeps the old realm alive, so the edit cannot reach it — fork (or wait
+for the next restart). The fork has a new session id and is locked like any started session (it inherits the parent's
+`turn/start` events), which is harmless because it already runs the tuned values.
 
 **`/trim preset` writes the pruner too.** It splices both rows of the preset it clones: `compaction-basic`'s trigger
 and `tool-result-pruner`'s `thresholdChars`, the latter from the same derivation auto-tune uses

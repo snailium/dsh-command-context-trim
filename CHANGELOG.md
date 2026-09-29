@@ -5,6 +5,23 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-09-28
+
+### Fixed (documentation)
+
+- **"Fork is how an existing conversation gets the tuning" was wrong, and so was the reason given for it.** The
+  earlier text said the session header's projection does not change, therefore an existing session cannot pick up an
+  edited preset. Both halves are wrong. The preset id lives in the session's `agentPreset` **projection** (folded from
+  events — `presetForObservation` reads `observation.projections.values.agentPreset`), not in the header; and the
+  definition behind that id is **re-resolved on every adopt**: `createOrAdopt` and `resumeObserved` both call
+  `composeAgent(presetForObservation(observation))` before `agents.resume({ setup })`, and `retain(id)` returns the
+  generation the *current* definition activated. Measured consequence: a session that was idle while the preset was
+  edited picks the tuning up by simply being **resumed** — no fork, no new session id.
+
+  What the projection fact *does* explain is the binding: a **live** agent holds the generation it composed, so that
+  realm stays alive and an edit cannot reach it. Fork remains the tool for exactly that case. README (both languages)
+  and the `dsh-compaction-config` / `dsh-session-records` skills are corrected accordingly, with the line references.
+
 ## [0.4.7] - 2026-09-28
 
 ### Added
@@ -656,7 +673,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.8...HEAD
+[0.4.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.4...v0.4.5
