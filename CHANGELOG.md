@@ -5,6 +5,22 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-09-28
+
+### Added
+
+- **`README.zh.md` is a maintained translation again, and a test keeps it one.** The file had drifted to 0.3.8 while
+  the plugin reached 0.4.5 — no `inplace`, no `rescue`, no coverage report, no fork guidance, the old pruner default —
+  which is worse than no translation, because it looks complete. It is now rewritten against the 0.4.5 English README
+  with the same 18-section structure, the same commands, keys, defaults, formulas and verification facts (long English
+  passages are condensed, nothing that a reader would act on is dropped), and it carries a
+  `synced-with-readme: <version>` marker.
+
+  `test/docs-sync.test.js` enforces the parts that must not drift: identical section counts, every command/flag/key/env
+  var present on both sides, the marker's version matching `package.json`, and the derived pruner default (with an
+  explicit guard against the old `0` opt-out reappearing as the documented default — the exact mistake this audit
+  found).
+
 ## [0.4.5] - 2026-09-28
 
 ### Fixed (documentation)
@@ -616,7 +632,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.2...v0.4.3
