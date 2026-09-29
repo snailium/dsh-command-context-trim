@@ -299,7 +299,14 @@ need. Verified state, by feature:
 
 What the ❌ entries mean in practice:
 
-- **Auto-sync keeps the preset definition current, and `check` says what is missing.** With `autoTuneCompaction` on,
+- **Where auto-tuning actually applies (measured, not assumed).** In a **web** profile the host plane does not receive
+the session agents' lifecycle events — the agents are created inside each session's preset realm — so neither the
+automatic retune nor the preset-definition sync fires there: a web profile logs the boot-time refusal and then
+nothing, however many sessions run. That is why web is a **manual** workflow: `/trim preset inplace` writes the
+tuning, `/trim preset check` tells you when a newly added route made it stale, and a fork (or a new session) applies
+it. The automatic paths remain meaningful for profiles whose host plane does own the agents (headless, TUI).
+
+**Auto-sync keeps the preset definition current, and `check` says what is missing.** With `autoTuneCompaction` on,
 a web profile cannot retune a running session (compaction lives inside its preset realm), so the plugin does the one
 thing that plane allows: on the first new session it keeps the preset *definition* in sync — one write per preset id
 per process, never blocking a turn — which is what makes the next fork, new session, or restart already correct when

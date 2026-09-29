@@ -5,6 +5,19 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-28
+
+### Documented
+
+- **The scope of the automatic paths, measured instead of assumed.** Two isolated instances and the production
+  service agree: a web profile logs the boot-time `compaction is not reachable from this plane` refusal and then
+  *nothing* — no per-session retune line, no preset-sync line — because the session agents are created inside each
+  session's preset realm and their lifecycle events never reach the host plane where this plugin lives. The automatic
+  retune and the definition sync therefore apply to profiles whose host plane owns the agents (headless, TUI); for web
+  the workflow is `/trim preset inplace` plus `/trim preset check` (staleness and uncovered small routes) and a fork or
+  a new session to apply it. This is a documentation correction, not a behaviour change: the code stays, because it is
+  right where it can run.
+
 ## [0.4.3] - 2026-09-28
 
 ### Fixed
@@ -583,7 +596,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.0...v0.4.1
