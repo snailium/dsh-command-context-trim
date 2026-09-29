@@ -377,6 +377,25 @@ suite against them (that is what caught the schemastery regression), so this is 
 boot. Live instances have been booted on 0.1.5 (the `dsh-container` E2E below) and on 0.1.7 (the isolated-instance
 checks below); a booted 0.1.5 **web** host — and therefore the browser half on that line — has never been exercised.
 
+## The settings card
+
+The Plugins page card shows **effective values, not overrides**: a field the deployment never set displays the default
+the plugin will actually use, because a blank control is how "why is my new model still untuned" becomes
+unanswerable. It is grouped into two sections — **Compaction** (trigger, summarization route, the two auto-tune
+switches) and **Prune** (the tool-result pruner threshold) — and the pruner is one mode select plus a number box that
+exists only in `Custom`:
+
+| Control | Lands on the setting |
+|---|---|
+| `Disabled` | `0` (leave the pruner alone) |
+| `Auto` | `auto` (derive from the routed window) |
+| `Custom` | the character count typed into the box |
+
+`Auto tune compaction at runtime` carries, in bold, the one caveat that matters: **headless profile only — a web
+profile must use the `/trim preset` command** (session agents live inside preset realms there and their lifecycle
+events never reach the host plane). The switches are the shell's own `Switch` primitive; the mode select is a plain
+`<select>`, because the primitives ship no select.
+
 ## Configuration
 
 Override on the `context-trim` row of a profile patch (the bundle's own `cordis.patch.yml` lists the full default set):

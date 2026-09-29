@@ -22,9 +22,19 @@ async function loadBundle() {
 	return registrations[0];
 }
 
+/** The narrowest `require` that lets the bundle factory load outside a browser. */
+function require_stub() {
+	const { primitives, react } = stubs();
+	return (name) => {
+		if (name === 'react') return react;
+		if (name === '@deepseek-ai/dsh-client-ui-primitives') return primitives;
+		throw new Error(`unexpected require(${name})`);
+	};
+}
+
 /** Minimal stand-ins for the shared primitives and React. */
 function stubs() {
-	const calls = { form: [], fields: [], model: null };
+	const calls = { form: [], fields: [], model: null, edits: [], switches: [] };
 	const primitives = {
 		SettingsForm: function SettingsForm(props, ...children) {
 			return { type: 'SettingsForm', props, children };
@@ -32,6 +42,10 @@ function stubs() {
 		SettingsValueField: function SettingsValueField(props) {
 			calls.fields.push(props);
 			return { type: 'SettingsValueField', props };
+		},
+		Switch: function Switch(props) {
+			calls.switches.push(props);
+			return { type: 'Switch', props };
 		},
 		settingsNumberField: (name) => ({ name, numeric: true }),
 		settingsTextField: (name) => ({ name, numeric: false }),
@@ -48,17 +62,35 @@ function stubs() {
 				return { status: 'ready', writable: true, revision: 7 };
 			}
 			field(name) {
-				return { value: name === 'compactionTargetRatio' ? '0.8' : '', overridden: false, invalid: false };
+				// Measured shape: `{text, overridden, invalid}` — and a boolean's `text` is always empty.
+				if (name === 'compactionTargetRatio') return { text: '0.8', overridden: true, invalid: false };
+				if (name === 'prunerThresholdChars') return { text: 'auto', overridden: true, invalid: false };
+				if (name === 'compactionRoute') return { text: '', overridden: false, invalid: false };
+				return { text: '', overridden: true, invalid: false };
 			}
 			actions() {
-				return { save: () => 'saved', discard: () => 'discarded', edit: (f, v) => [f, v], resetField: (f) => f };
+				return {
+					save: () => 'saved',
+					discard: () => 'discarded',
+					edit: (f, v) => {
+						calls.edits.push([f, v]);
+						return [f, v];
+					},
+					resetField: (f) => f
+				};
 			}
 			dispose() {
 				this.disposed = true;
 			}
 		}
 	};
-	const react = { createElement: (type, props, ...children) => ({ type, props, children }) };
+	const react = {
+		createElement: (type, props, ...children) => ({ type, props, children }),
+		// The card uses these two: it keeps the pruner's selected mode locally (Custom can be picked before a number is
+		// typed) and resyncs on the effective value.
+		useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+		useEffect: () => {}
+	};
 	return { primitives, react, calls };
 }
 
@@ -69,9 +101,24 @@ function stubContext() {
 	const context = {
 		configForms: {
 			get: (id) => {
-				scopes.push(id);
-				return { id };
-			},
+					scopes.push(id);
+					// The deployment's effective configuration lives on the scope, not in the per-field entries.
+					return {
+						id,
+						getSnapshot: () => ({
+							status: 'ready',
+							writable: true,
+							revision: 7,
+							value: {
+								compactionTargetRatio: '0.8',
+								autoTuneCompaction: 'true',
+								tuneStockDisabledRoutes: 'false',
+								prunerThresholdChars: 'auto'
+							},
+							base: {}
+						})
+					};
+				},
 			whileServed: (ids, register) => register(new Set(ids))
 		},
 		slots: {
@@ -106,7 +153,7 @@ test('the bundle registers into plugins.item behind the served namespace only', 
 		['compactionRoute', false],
 		['autoTuneCompaction', false],
 		['tuneStockDisabledRoutes', false],
-		['prunerThresholdChars', true]
+		['prunerThresholdChars', false]
 	]);
 });
 
@@ -132,17 +179,63 @@ test('the component returns the summary one-liner and the five-field form body',
 	const tree = component({ ...props, view: 'detail' });
 	assert.equal(tree.type, primitives.SettingsForm, 'the platform supplies the frame; we render only its body');
 	assert.equal(tree.props.state.writable, true);
-	const labels = tree.children.map((childSection) => childSection.props.label);
-	assert.deepEqual(labels, ['compactionTargetRatio', 'compactionRoute', 'autoTuneCompaction', 'tuneStockDisabledRoutes', 'prunerThresholdChars']);;
-	assert.equal(tree.children[0].props.numeric, true);
-	assert.equal(tree.children[1].props.numeric, undefined, 'the route field is free text');
-	assert.equal(tree.children[0].props.hint, 'compactionTargetRatioHint');
-	assert.deepEqual(tree.children[0].props.onEdit('0.75'), ['compactionTargetRatio', '0.75']);
-	assert.equal(tree.children[1].props.onReset(), 'compactionRoute');
-	assert.equal(tree.children[2].props.numeric, undefined, 'the auto-tune switch is text: the card types true/false');
-	assert.equal(tree.children[3].props.hint, 'tuneStockDisabledRoutesHint');
-	assert.equal(tree.children[4].props.numeric, undefined, "the pruner field takes 'auto' as well as digits");
-	assert.deepEqual(tree.children[4].props.onEdit('32768'), ['prunerThresholdChars', '32768']);
+	// Only the ordinary value fields carry labels now: the switches and the pruner select are their own controls.
+	// React stores the component *function* as `type` (the stub never invokes it), so match on its name.
+	const labels = tree.children
+		.filter((child) => child.type?.name === 'SettingsValueField')
+		.map((child) => child.props.label);
+	// Ratio and route are always value fields; the pruner's number box exists only in Custom mode, so it is absent here.
+	assert.deepEqual(labels, ['compactionTargetRatio', 'compactionRoute']);
+
+	// Section headings are plain nodes inside the form body (SettingsForm renders props.children directly).
+	// The stub keeps children on the node (`{type, props, children}`), not inside props.
+	const headingText = (node) => JSON.stringify(node.children ?? '');
+	assert.ok(headingText(tree.children[0]).includes('sectionCompaction'), 'the Compaction section comes first');
+	assert.ok(headingText(tree.children[5]).includes('sectionPrune'), 'the Prune section comes before the pruner control');
+
+	// The two text controls stay ordinary value fields.
+	const ratio = tree.children[1];
+	const route = tree.children[2];
+	assert.equal(ratio.props.numeric, true);
+	assert.equal(ratio.props.hint, 'compactionTargetRatioHint');
+	assert.deepEqual(ratio.props.onEdit('0.75'), ['compactionTargetRatio', '0.75']);
+	assert.equal(route.props.numeric, undefined, 'the route field is free text');
+	assert.equal(route.props.onReset(), 'compactionRoute');
+
+	// Auto tune is a switch, and its state comes from the effective value (FIELD_DEFAULTS), never from a blank field.
+	const autoSwitch = tree.children[3];
+	const autoControl = autoSwitch.children[0].children[1];
+	assert.equal(autoControl.type?.name, 'Switch', 'the shell ships the switch control');
+	const autoButton = autoControl;
+	assert.equal(autoButton.props.checked, true, 'the deployment value on `base` wins over the empty staged value');
+	autoButton.props.onChange(false);
+	assert.deepEqual(calls.edits.at(-1), ['autoTuneCompaction', 'false'], 'flipping stages false');
+	autoButton.props.onChange(true);
+	const autoHint = JSON.stringify(autoSwitch.children[1]);
+	assert.ok(autoHint.includes('autoTuneHeadlessOnly'), 'the caveat rides the control');
+	assert.ok(autoHint.includes('strong'), 'and it is bold');
+
+	// Enable stock-disabled routes is a switch too.
+	const stockSwitch = tree.children[4];
+	const stockButton = stockSwitch.children[0].children[1];
+	assert.equal(stockButton.type?.name, 'Switch');
+	assert.equal(stockButton.props.checked, false);
+	stockButton.props.onChange(true);
+	assert.deepEqual(calls.edits.at(-1), ['tuneStockDisabledRoutes', 'true']);
+
+	// The pruner: a mode select plus a number box that only exists for Custom.
+	const pruner = tree.children[6];
+	const select = pruner.children[0].children[1];
+	assert.equal(select.props.value, 'auto', 'an unset threshold renders as Auto, not blank');
+	assert.deepEqual(select.children.map((option) => option.props.value), ['disabled', 'auto', 'custom']);
+	assert.equal(pruner.children[1], null, 'the number box is hidden while the mode is Auto');
+	select.props.onChange({ target: { value: 'disabled' } });
+	assert.deepEqual(calls.edits.at(-1), ['prunerThresholdChars', '0'], 'Disabled lands 0');
+	select.props.onChange({ target: { value: 'auto' } });
+	assert.deepEqual(calls.edits.at(-1), ['prunerThresholdChars', 'auto'], 'Auto lands auto');
+	select.props.onChange({ target: { value: 'custom' } });
+	assert.deepEqual(calls.edits.at(-1), ['prunerThresholdChars', 'auto'], 'Custom alone stages nothing');
+
 	assert.equal(typeof tree.props.onSave, 'function');
 	assert.equal(typeof tree.props.onDiscard, 'function');
 });
@@ -154,4 +247,17 @@ test('an older web host gets no registration instead of a broken page', async ()
 	exports.apply({});
 	exports.apply({ configForms: undefined, slots: { register: () => (touched += 1) }, locale: {} });
 	assert.equal(touched, 0);
+});
+
+test('the card\'s default mirror matches the plugin\'s own defaults', async () => {
+	// The card shows effective values, so its mirror is what a deployment with nothing set will display. If the two
+	// drift, the page quietly lies about what the plugin will do.
+	const { DEFAULTS } = await import('../lib/config.js');
+	const exported = (await loadBundle()).factory(require_stub()).FIELD_DEFAULTS;
+	for (const field of ['compactionTargetRatio', 'autoTuneCompaction', 'tuneStockDisabledRoutes', 'prunerThresholdChars']) {
+		assert.equal(exported[field], DEFAULTS[field], `${field} mirror must match DEFAULTS`);
+	}
+	// `compactionRoute` has no default at all; the card shows an empty field for it.
+	assert.equal(exported.compactionRoute, '');
+	assert.equal(DEFAULTS.compactionRoute, undefined, 'the route is deliberately unset by default');
 });

@@ -5,6 +5,30 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-09-28
+
+### Added
+
+- **The settings card was rebuilt: two sections, real switches, a mode select, and effective values.** Previously it
+  rendered five text fields, three of which were blank no matter what the deployment held — the projection exposed
+  only two of them, so `state.autoTuneCompaction` and friends were `undefined`. It is now grouped into **Compaction**
+  and **Prune**; `Auto tune compaction at runtime` and `Enable stock-disabled routes` are the shell's own `Switch`
+  (found in the official subagent card after wrongly concluding the primitives shipped none); and the pruner threshold
+  is a mode select (`Disabled` → `0`, `Auto` → `auto`) plus a number box that appears only for `Custom`, whose value
+  is what reaches the setting. `Auto tune compaction at runtime` states the caveat in bold: **headless profile only —
+  a web profile must use the `/trim preset` command.**
+
+  Effective values come from the scope snapshot's configuration, not from the per-field entries: those are
+  `{text, overridden, invalid}`, and a boolean's `text` is *always* empty, which is why a deployment with
+  `autoTuneCompaction: true` rendered as an empty (then false) switch until this was measured with a probe. Unset
+  fields now show the plugin's real defaults, from a mirror that a test checks against `lib/config.js`.
+
+### Verified
+
+- Rendered and driven in an isolated 0.1.7 instance: both switches (`true` for the patched `autoTuneCompaction`),
+  the select's three options with `auto` selected, the number box hidden for `Auto`, both section headings, and the
+  bold caveat all present in the DOM.
+
 ## [0.4.6] - 2026-09-28
 
 ### Added
@@ -632,7 +656,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.3...v0.4.4

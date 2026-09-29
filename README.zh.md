@@ -2,7 +2,7 @@
 
 [English →](README.md)
 
-<!-- synced-with-readme: 0.4.6 -->
+<!-- synced-with-readme: 0.4.7 -->
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加一个**不调用任何模型**的 `/trim`：
 在真正溢出之前，把对话里最旧、最不重要的一段上下文裁掉，让会话能切到**窗口更小的模型**上继续跑；同时可以按路由
@@ -129,6 +129,22 @@ coverage: 4 route(s) configured, 3 covered by this preset, 1 not covered.
 **session format v4 下的标记来源。** 替换消息携带来源 kind `plugin:dsh-command-context-trim` —— v4 要求的
 `plugin:<plugin id>` 形状 —— 因为 0.1.7 的准入路径会拒绝已退休的 `{kind: 'plugin'}` 包装，报
 `format v4 message requires a producer-owned source kind`。
+
+## 设置卡片
+
+Plugins 页面上的卡片显示的是**生效值，而不是"是否覆盖"**：部署没设过的字段会显示插件真正会用到的默认值——因为一片空白
+的控件正是"我的新模型为什么还没调优"变成无解问题的原因。卡片分两个分区：**压缩**（触发阈值、摘要路由、两个自动调优
+开关）与**裁剪**（工具结果裁剪阈值），而裁剪阈值是"**选值下拉 + 数值框**"：只有选 `Custom` 时数值框才出现。
+
+| 选值 | 落到设置面的值 |
+|---|---|
+| `Disabled` | `0`（不动 pruner）|
+| `Auto` | `auto`（按路由窗口推导）|
+| `Custom` | 你填进数值框的字符数 |
+
+`运行时自动调优压缩阈值` 上以**粗体**写着唯一要紧的前提：**仅限 headless profile —— web profile 需使用 `/trim preset` 命令来调优**
+（web 里会话 agent 在各自 preset 域内创建，其生命周期事件到不了 host 平面）。开关用的是壳子自带的 `Switch` 原语；选值框是
+原生 `<select>`（原语没有 Select）。
 
 ## 配置
 
