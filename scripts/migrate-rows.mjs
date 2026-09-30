@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Move the compaction tuner's keys from the `context-trim` row onto a `context-trim-tuning` row.
+ * Move the compaction tuner's keys from the `context-trim` row onto a `context-tuning` row.
  *
  * 0.6.0 split the bundle into two rows, and 0.6.1 gave the tuning half its own command. A profile that predates
  * the split still carries all five tuner keys on `context-trim`, and installing the new bundle **alone** would
- * silently switch the automatic tuning off: the new `context-trim-tuning` row declares only `role`, so the
+ * silently switch the automatic tuning off: the new `context-tuning` row declares only `role`, so the
  * `registerAutoTune` call it makes reads `autoTuneCompaction: false` and returns before doing anything. The values
- * survive (the `/trim-tune` command merges them back), but the *automatic* behaviour does not. This script is what
+ * survive (the `/context-tune` command merges them back), but the *automatic* behaviour does not. This script is what
  * carries them across, so the behaviour survives too.
  *
  * It is a text edit on purpose. The patch is a hand-maintained YAML list whose rows are interleaved with long
@@ -20,13 +20,13 @@
  *   node scripts/migrate-rows.mjs --stdin              # read stdin, write the result to stdout
  *
  * It is idempotent: a patch that already has the keys on the tuning row is left byte-identical, and the
- * `context-trim-tuning` row is created only when it is missing.
+ * `context-tuning` row is created only when it is missing.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
 const TRIM_ROW = 'context-trim';
-const TUNING_ROW = 'context-trim-tuning';
+const TUNING_ROW = 'context-tuning';
 /** The keys that moved to the tuning row in 0.6.0, with the value each takes when it is not written. */
 const TUNING_KEYS = {
 	compactionTargetRatio: '0.8',

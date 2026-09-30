@@ -5,6 +5,24 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-09-29
+
+### Changed
+
+- **Renamed, as one family: the row `context-trim-tuning` is now `context-tuning`, and `/trim-tune` is now
+  `/context-tune`.** The old row name invited exactly the wrong reading — it had nothing to do with trimming, deciding
+  when compaction fires and how hard the tool-result pruner clips — and a name that says "tuning" inside a plugin
+  about trimming suggests the knobs configure `/trim`, which none of them do. `/trim` keeps its own short name: it
+  predates the split, and it is the whole reason somebody reaches for the other one.
+
+  `scripts/migrate-rows.mjs` follows the new name, and a profile whose patch still names the old row needs the row id
+  rewritten — the host skips a patch row that names an entry it cannot find, so the tuner's values would otherwise go
+  inert **with only a warning**. Pinned by a test so neither name can drift back.
+
+- The `role` VALUE stays `tuning`. It is an internal dispatch flag rather than a name, deployed profiles already set
+  it, and the schema accepts nothing else — renaming it would break a boot and buy no clarity.
+
+
 ## [0.6.2] - 2026-09-29
 
 ### Added
@@ -814,7 +832,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.1...v0.6.0

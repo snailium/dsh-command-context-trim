@@ -100,7 +100,7 @@ function stubs() {
  * The registration for one row's card. Two rows means two keyed entries, and `registered[0]` is only the first of them,
  * so a test about the tuner's card has to name the row rather than take whatever came first.
  * @param {object[]} registered - what the stub recorded.
- * @param {string} rowId - `context-trim` or `context-trim-tuning`.
+ * @param {string} rowId - `context-trim` or `context-tuning`.
  * @returns the registration whose key ends with that row id.
  */
 function cardFor(registered, rowId) {
@@ -117,7 +117,7 @@ function stubContext() {
 	// The Host's effective configuration, which a landed write really changes — without this, a second save of the
 	// same value would look like "nothing to do" and the test would be measuring the stub, not the card.
 	const values = {
-		'context-trim-tuning': { role: 'tuning', compactionTargetRatio: 0.8, autoTuneCompaction: false, tuneStockDisabledRoutes: false, prunerThresholdChars: 'auto' },
+		'context-tuning': { role: 'tuning', compactionTargetRatio: 0.8, autoTuneCompaction: false, tuneStockDisabledRoutes: false, prunerThresholdChars: 'auto' },
 		'context-trim': { role: 'trim', targetRatio: 0.9, retainRatio: 0.16, minTailTokens: 2048, reserveOutputTokens: 8192, protectHeadNodes: 1, maxAutoTrimRetries: 3, allowTailTrim: true, autoTrim: true, emergencyTrim: true, preferInPlacePrune: true, pruneThresholdChars: 8192, pruneHeadChars: 4096, pruneTailChars: 1024 }
 	};
 	const context = {
@@ -175,13 +175,13 @@ test('the bundle registers into the keyed row slot behind the served namespace o
 	exports.apply(context);
 			// One scope per row: each row is its own entry with its own config namespace, and a card that reached for the
 		// wrong one would write the tuner's values into the trims' row.
-		assert.deepEqual(scopes, ['context-trim', 'context-trim-tuning'], 'each card binds its own row namespace');
+		assert.deepEqual(scopes, ['context-trim', 'context-tuning'], 'each card binds its own row namespace');
 	// The row slot, keyed `<package>#<row id>`. This is the whole reason a third-party bundle does NOT use
 	// `plugins.item`: that slot belongs to the official settings pages, and a card parked there renders under
 	// "Official" while its Save is refused (measured on 0.2.0).
 	// One keyed entry per row, or a row simply has no Configure button and nothing is logged.
 	assert.equal(registered.length, 2, 'one card per row');
-	for (const row of ['context-trim', 'context-trim-tuning']) {
+	for (const row of ['context-trim', 'context-tuning']) {
 		const { options } = cardFor(registered, row);
 		assert.equal(options.name, 'plugins.row.config');
 		assert.equal(options.key, `dsh-command-context-trim#${row}`);
@@ -206,7 +206,7 @@ test('the component returns the summary one-liner and the five-field form body',
 	registration.factory((id) => (id === 'react' ? react : primitives));
 	const { context, registered } = stubContext();
 	registration.factory((id) => (id === 'react' ? react : primitives)).apply(context);
-	const { options, component: wrapper } = cardFor(registered, 'context-trim-tuning');
+	const { options, component: wrapper } = cardFor(registered, 'context-tuning');
 	// The wrapper builds a React element rather than returning the card, so unwrap it the way React would.
 	const element = wrapper({ t: (key) => key, view: 'summary', useTrimCard: () => ({}) });
 	const component = element.type;
@@ -225,7 +225,7 @@ test('the component returns the summary one-liner and the five-field form body',
 	// `row` is what the two registrations pass down; without it a card cannot tell which half it is.
 	const props = {
 		t: (key) => key,
-		row: { rowId: 'context-trim-tuning', role: 'tuning', module: 'tune' },
+		row: { rowId: 'context-tuning', role: 'tuning', module: 'tune' },
 		useTrimCard: (select) => select(injected.hooks.trimCard.getSnapshot()),
 		...injected
 	};
@@ -294,7 +294,7 @@ test('the component returns the summary one-liner and the five-field form body',
 	const harness = stubContext();
 	const second = (await loadBundle()).factory((id) => (id === 'react' ? fresh.react : fresh.primitives));
 	second.apply(harness.context);
-	const live = cardFor(harness.registered, 'context-trim-tuning').options.inject();
+	const live = cardFor(harness.registered, 'context-tuning').options.inject();
 	live.edit('prunerThresholdChars', '0');
 	await live.save();
 	assert.deepEqual(harness.mutations[0].ops, [{ op: 'set', path: ['prunerThresholdChars'], value: 0 }]);
@@ -343,7 +343,7 @@ test('a staged switch is written as a boolean, not as the string "true"', async 
 	const factory = (id) => (id === 'react' ? react : primitives);
 	const { context, registered, mutations } = stubContext();
 	registration.factory(factory).apply(context);
-	const { options } = cardFor(registered, 'context-trim-tuning');
+	const { options } = cardFor(registered, 'context-tuning');
 	const injected = options.inject();
 
 	injected.edit('autoTuneCompaction', 'true');
@@ -367,7 +367,7 @@ test('the pruner writes "auto" or a number, and a reset drops the edit instead o
 	const factory = (id) => (id === 'react' ? react : primitives);
 	const { context, registered, mutations } = stubContext();
 	registration.factory(factory).apply(context);
-	const injected = cardFor(registered, 'context-trim-tuning').options.inject();
+	const injected = cardFor(registered, 'context-tuning').options.inject();
 
 	injected.edit('prunerThresholdChars', '16384');
 	await injected.save();
@@ -451,7 +451,7 @@ test('each row renders its OWN card: the trims get their thirteen knobs, the tun
 	], 'booleans and numbers, written from the trim row');
 
 	// ── the tune card ──────────────────────────────────────────────────────────
-	const tune = render('context-trim-tuning');
+	const tune = render('context-tuning');
 	const tuneIds = idsIn(tune.tree);
 	for (const key of ['compactionTargetRatio', 'compactionRoute', 'auto-tune', 'stock-disabled', 'pruner-threshold', 'pruner-mode']) {
 		assert.ok(tuneIds.includes(`plugin-config-tune-${key}`), `the tune card shows ${key}`);

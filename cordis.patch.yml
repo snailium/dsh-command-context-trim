@@ -5,13 +5,13 @@
 #
 # The two inserts below are the plugin's two halves, each a row of its own so each can
 # be switched off and tuned on its own: `context-trim` owns the trims (`/trim`, and the
-# automatic trim when a request hits the model's context wall), `context-trim-tuning`
+# automatic trim when a request hits the model's context wall), `context-tuning`
 # owns when compaction fires and how hard the pruner clips. The config blocks are the
 # full default sets, shown so overrides are a copy/paste away. Remove `config` entirely
 # to use the built-in defaults (`lib/config.js`).
 #
 # Upgrading from a single-row install? The compaction knobs used to live on the
-# `context-trim` row: move the five keys named below onto `context-trim-tuning`, or
+# `context-trim` row: move the five keys named below onto `context-tuning`, or
 # `scripts/migrate-rows.mjs` will do it and report what it changed.
 - insert:
     - id: context-trim
@@ -74,7 +74,7 @@
 # both. The two CARDS do distinguish themselves — each names the component it configures — and each row has its own
 # switch and its own settings, which is what the split was for.
 - insert:
-    - id: context-trim-tuning
+    - id: context-tuning
       name: dsh-command-context-trim
       config:
         role: tuning

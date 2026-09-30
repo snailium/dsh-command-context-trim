@@ -8,6 +8,7 @@ import { readConfig, resolveConfig } from '../lib/config.js';
 const ROOT = new URL('..', import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8'));
 const clientSource = readFileSync(new URL('lib/client.js', ROOT), 'utf8');
+const hostSource = readFileSync(new URL('lib/index.js', ROOT), 'utf8');
 const patchSource = readFileSync(new URL('cordis.patch.yml', ROOT), 'utf8');
 // The tuning half has its own patch file on purpose: a row's heading comes from its module URL, so two rows on one
 // file are both called "dsh-command-context-trim" in the UI and a reader cannot tell the cards apart.
@@ -98,12 +99,12 @@ test('the client entry id matches the loader row id, which is what the page keys
 	// has one module name, and dsh resolves a row's `meta` by module name too, so neither a per-row meta nor a second
 	// patch file can separate the headings. The cards therefore name their own component — pinned below.
 	// Both rows live in the one patch, and read the module off each row's own `name:` line.
-	const rowModules = [...patchSource.matchAll(/^\s+- id: (context-trim[a-z-]*)\n\s+name: (\S+)/gmu)].map((m) => [m[1], m[2]]);
+	const rowModules = [...patchSource.matchAll(/^\s+- id: (context-[a-z-]*)\n\s+name: (\S+)/gmu)].map((m) => [m[1], m[2]]);
 	assert.equal(rowModules.length, 2, 'both rows are declared, each with a name');
 	assert.equal(rowModules[0][1], rowModules[1][1], `both rows are on ${rowModules[0][1]}; the heading cannot distinguish them`);
 	assert.match(clientSource, /cardTrimIntro/u, 'so the trim card names itself');
 	assert.match(clientSource, /cardTuneIntro/u, 'and so does the tune card');
-	assert.match(patchSource, /- id: context-trim-tuning$/mu, 'the tuning row must be declared in the one patch a bundle mounts');
+	assert.match(patchSource, /- id: context-tuning$/mu, 'the tuning row must be declared in the one patch a bundle mounts');
 	assert.match(patchSource, /role: tuning/u, 'the tuning row must declare the role its module dispatches on');
 	// The row must point at a DISTINCT MODULE, because a row's heading comes from its module and two rows on one entry
 	// are both called "dsh-command-context-trim". A row's `name` is a JS module specifier, not a patch file.
@@ -141,4 +142,21 @@ test('the card follows the 0.1.7 contract: summary one-liner, shared body, no ow
 	assert.equal(/createElement\('li'/u.test(clientSource), false, 'the platform supplies the card frame');
 	assert.equal(/slots\.register\([^)]*header/u.test(clientSource), false, 'no doubled card header');
 	assert.match(clientSource, /if \(ctx\.configForms === undefined \|\| ctx\.slots === undefined/u, 'older web hosts get no registration at all');
+});
+
+test('the two names are one family: the row and the command share the context-tune stem', () => {
+	// 0.6.3 renamed `context-trim-tuning` to `context-tuning` and `/trim-tune` to `/context-tune`. The reason is that
+	// the row had nothing to do with trimming — it decides when compaction fires and how hard the pruner clips — and a
+	// `trim-tuning` name invited exactly the wrong reading. The `role` VALUE stays `tuning`: it is an internal dispatch
+	// flag rather than a name, it is already set in deployed patches, and the schema accepts nothing else, so renaming it
+	// would break a boot for no gain.
+	assert.match(patchSource, /- id: context-tuning$/mu, 'the row is `context-tuning`');
+	assert.equal(/- id: context-trim-tuning$/mu.test(patchSource), false, 'and the old row id is gone');
+	assert.equal(/\/trim-tune/u.test(clientSource), false, 'no card copy mentions the old command');
+	assert.match(hostSource, /name: 'context-tune'/u, 'the command is `/context-tune`');
+	assert.equal(/name: 'trim-tune'/u.test(hostSource), false, 'and the old command is gone');
+	// `/trim` still points at the new name rather than dumping a usage wall on the old spelling.
+	assert.match(hostSource, /moved to \/context-tune/u);
+	// The trims keep their own short command; only the tuning half was renamed, because `/trim` predates the split.
+	assert.match(hostSource, /name: 'trim'/u);
 });
