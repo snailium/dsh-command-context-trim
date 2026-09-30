@@ -100,6 +100,7 @@ test('the card follows the 0.1.7 contract: summary one-liner, shared body, no ow
 	assert.match(clientSource, /key: 'compactionTargetRatio', kind: 'number'/u);
 	assert.match(clientSource, /key: 'prunerThresholdChars', kind: 'pruner'/u);
 	assert.doesNotMatch(clientSource, /new SettingsFormModel\(/u, 'the model stages text and cannot write a typed value');
+	assert.doesNotMatch(clientSource, /SettingsFormModel,|settingsTextField,|settingsNumberField,/u, 'and none of them is even imported');
 	assert.match(clientSource, /h\(\s*SettingsForm,/u);
 	assert.match(clientSource, /numeric: true/u, 'the ratio is a numeric field');
 	assert.equal(/createElement\('li'/u.test(clientSource), false, 'the platform supplies the card frame');

@@ -5,6 +5,14 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-29
+
+### Fixed
+
+- Removed three dead imports from the client half (`SettingsFormModel`, `settingsNumberField`, `settingsTextField`).
+  0.5.0 stopped using them but left them in the destructuring, so the published file still pulled names it never
+  called. No behaviour change; pinned by a test so the import list stays exactly the three presentational halves.
+
 ## [0.5.0] - 2026-09-29
 
 ### Fixed
@@ -722,7 +730,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.7...v0.4.8
