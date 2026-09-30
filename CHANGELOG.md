@@ -5,6 +5,30 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-29
+
+### Fixed
+
+- **The settings card could not save on dsh 0.2.0.** The card staged every field as **text** and let the primitives'
+  `SettingsFormModel` parse it on save. That works for strings and numbers, and it is what 0.1.7 accepted for booleans
+  too, because a `.volatile()` field relaxed the type check and the string `"true"` landed where a `z.boolean()` was
+  declared. 0.2.0 validates the operation against the schema, so a string is not a boolean and the write is refused in
+  band: no HTTP error, no console output, the draft kept, and the frame's "The deployment rejected these values".
+  Measured both ways on an isolated 0.2.0: changing the numeric trigger saved and landed in the profile patch, while
+  flipping a boolean switch was refused.
+
+  The card no longer stages text for a typed field. It declares each field with the type it must be written as
+  (`compactionTargetRatio` number, `autoTuneCompaction` and `tuneStockDisabledRoutes` booleans, `prunerThresholdChars`
+  `'auto'` or a number, `compactionRoute` text), keeps its own draft over `configForms.get('context-trim')`, and issues
+  one revision-fenced `scope.mutate` with correctly typed values — the pattern the in-box cards use. The frame and the
+  text controls are still the shell's `SettingsForm` and `SettingsValueField`, which only read
+  `{text, overridden, invalid}` and callbacks. A **Reset** now drops the field's edit rather than sending an `unset`
+  operation, so a field whose schema has no default can never be cleared away.
+
+  Verified in isolated instances of both versions: on 0.2.0 the boolean lands as a real `true` in the profile patch,
+  and on 0.1.7 the same interaction still lands. 154 tests, including one that pins the operations so a regression back
+  to string-typed booleans fails there rather than in a browser.
+
 ## [0.4.9] - 2026-09-28
 
 ### Fixed
@@ -698,7 +722,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.9...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.6...v0.4.7

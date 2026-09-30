@@ -94,9 +94,14 @@ test('the card follows the 0.1.7 contract: summary one-liner, shared body, no ow
 	assert.match(clientSource, /name: 'plugins\.row\.config'/u);
 	assert.match(clientSource, /key: ROW_CONFIG_KEY/u);
 	assert.match(clientSource, /\$\{PACKAGE\}#\$\{ENTRY_ID\}/u);
+	// The card declares each field with the type it must be written as, and parses on save: a boolean staged as the
+	// string "true" is refused in band on 0.2.0, which is why the primitives' text-staging model is not used here.
+	assert.match(clientSource, /key: 'autoTuneCompaction', kind: 'boolean'/u);
+	assert.match(clientSource, /key: 'compactionTargetRatio', kind: 'number'/u);
+	assert.match(clientSource, /key: 'prunerThresholdChars', kind: 'pruner'/u);
+	assert.doesNotMatch(clientSource, /new SettingsFormModel\(/u, 'the model stages text and cannot write a typed value');
 	assert.match(clientSource, /h\(\s*SettingsForm,/u);
 	assert.match(clientSource, /numeric: true/u, 'the ratio is a numeric field');
-	assert.match(clientSource, /settingsTextField\('compactionRoute'\)/u);
 	assert.equal(/createElement\('li'/u.test(clientSource), false, 'the platform supplies the card frame');
 	assert.equal(/slots\.register\([^)]*header/u.test(clientSource), false, 'no doubled card header');
 	assert.match(clientSource, /if \(ctx\.configForms === undefined \|\| ctx\.slots === undefined/u, 'older web hosts get no registration at all');
