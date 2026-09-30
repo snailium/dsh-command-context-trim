@@ -5,6 +5,31 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-29
+
+### Added
+
+- **`/trim-tune` — the compaction-tuning surface, on its own command.** `preset`, `tune` and `rescue` moved off
+  `/trim` onto `/trim-tune`, which is registered by the `context-trim-tuning` row, so switching that row off removes
+  the whole command rather than leaving it in place with different defaults. `/trim` now answers the moved spelling
+  with the new name (`"/trim preset" moved to /trim-tune`) instead of a usage dump, because the old spelling is what
+  people type. A bare `/trim-tune` lists its own usage.
+- **`/trim-tune reset` — undo the presets this plugin wrote.** It removes our marker blocks from the profile patch,
+  which restores the base preset's own definition for both shapes tuning produces (an `inplace` override, which
+  shadows the base row, and a generated `-tuned` preset, which only ever added an id). The marker is what makes this
+  exact: the set of rows we wrote is knowable without matching a description string, so a preset someone tuned by
+  hand is never caught. Blocks belonging to other tools are reported and left alone. `reset check` reports without
+  writing; the real run backs the patch up to `.bak-trim-reset` first, and both forms say that sessions which
+  already started keep the preset they locked in, since dsh refuses a preset switch after the first turn
+  (`agent-preset/locked`).
+
+### Changed
+
+- The `/trim-tune` command description states the consequence a reader cannot guess: switching the tuning row off
+  does **not** reset presets that were already tuned, and they keep the values they were given until
+  `/trim-tune reset`.
+
+
 ## [0.6.0] - 2026-09-29
 
 ### Added
@@ -761,7 +786,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.9...v0.5.0

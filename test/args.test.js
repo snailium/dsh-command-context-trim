@@ -57,9 +57,9 @@ test('parses the preset subcommand, its modifiers and its rejections', () => {
 		preset: true,
 		route: { provider: 'opencode-go', model: 'deepseek-v4.1-flash' }
 	});
-	assert.match(parseTrimArguments('list').error, /only meaningful for \/trim preset/);
+	assert.match(parseTrimArguments('list').error, /only meaningful for \/trim-tune preset/);
 	assert.match(parseTrimArguments('preset list list').error, /duplicate "list"/);
-	assert.match(parseTrimArguments('preset 32k').error, /"32k" has no meaning for \/trim preset/);
+	assert.match(parseTrimArguments('preset 32k').error, /"32k" has no meaning for \/trim-tune preset/);
 	assert.match(parseTrimArguments('preset check check').error, /duplicate "check"/);
 });
 
@@ -72,6 +72,29 @@ test('parses the "default" modifier for preset generation only', () => {
 		default: true,
 		route: { provider: 'opencode-go', model: 'm' }
 	});
-	assert.match(parseTrimArguments('default').error, /only meaningful for \/trim preset/);
+	assert.match(parseTrimArguments('default').error, /only meaningful for \/trim-tune preset/);
 	assert.match(parseTrimArguments('preset default default').error, /duplicate "default"/);
+});
+
+test('the tuning subcommands are recognised as tuning, and a bare /trim-tune is not', async () => {
+	// The split is only meaningful if each command can tell the surface is not its own: `/trim` must refuse the
+	// tuning verbs, and `/trim-tune` must not treat a bare invocation as a trim.
+	const { isTuneInvocation, parseTrimArguments } = await import('../lib/args.js');
+	for (const input of ['preset', 'preset inplace', 'preset list', 'tune', 'tune check', 'rescue standard', 'reset', 'reset check', 'reset standard']) {
+		assert.equal(isTuneInvocation(parseTrimArguments(input)), true, `"${input}" is a tuning invocation`);
+	}
+	for (const input of ['check', '32k', 'lc:/models/q.gguf', '']) {
+		assert.equal(isTuneInvocation(parseTrimArguments(input)), false, `"${input}" is a plain trim`);
+	}
+});
+
+test('reset takes a preset id, and a flag is never mistaken for one', async () => {
+	// `/trim-tune reset check` must stay a dry run; `check` is the most likely thing a person types first, and
+	// reading it as a preset name would reset nothing while claiming it would.
+	const { parseTrimArguments } = await import('../lib/args.js');
+	assert.deepEqual(parseTrimArguments('reset'), { check: false, reset: true });
+	assert.deepEqual(parseTrimArguments('reset check'), { check: true, reset: true });
+	assert.deepEqual(parseTrimArguments('reset standard'), { check: false, reset: true, presetId: 'standard' });
+	assert.deepEqual(parseTrimArguments('reset check standard'), { check: true, reset: true, presetId: 'standard' });
+	assert.equal(parseTrimArguments('reset a b').error !== undefined, true, 'two ids is a mistake, not a second argument');
 });
