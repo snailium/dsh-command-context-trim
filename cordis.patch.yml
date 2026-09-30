@@ -3,9 +3,16 @@
 # Install into a profile:
 #   dsh plugin --profile <profile> add dsh-command-context-trim
 #
-# The insert activates the plugin; the config block below is the full default
-# set, shown so overrides are a copy/paste away. Remove `config` entirely to use
-# the built-in defaults (`lib/config.js`).
+# The two inserts below are the plugin's two halves, each a row of its own so each can
+# be switched off and tuned on its own: `context-trim` owns the trims (`/trim`, and the
+# automatic trim when a request hits the model's context wall), `context-trim-tuning`
+# owns when compaction fires and how hard the pruner clips. The config blocks are the
+# full default sets, shown so overrides are a copy/paste away. Remove `config` entirely
+# to use the built-in defaults (`lib/config.js`).
+#
+# Upgrading from a single-row install? The compaction knobs used to live on the
+# `context-trim` row: move the five keys named below onto `context-trim-tuning`, or
+# `scripts/migrate-rows.mjs` will do it and report what it changed.
 - insert:
     - id: context-trim
       name: dsh-command-context-trim
@@ -59,25 +66,25 @@
         # per process, the first time the agent goes idle. Only meaningful where compaction
         # is composed on the profile plane (headless/tui); a web profile keeps it inside each
         # session's preset, so there the plugin refuses and explains instead.
-        autoTuneCompaction: false
-        # Off by default: a route whose stock profile has no pressure trigger is left that way, because
-        # enabling one there only adds compaction events (measured: 15 -> 24 on one task). Set true to tune
-        # those routes anyway; see the README's "When it does not pay".
-        tuneStockDisabledRoutes: false
-        # 0 leaves the tool-result pruner alone. A positive value also writes that row's thresholdChars
-        # (dsh's default is 8192) so one whole-file read is not clipped away — the lever that matters on a
-        # small window. Web profiles keep the pruner inside each session's preset: the plugin reports that.
-        prunerThresholdChars: auto     # derive per route; 0 opts out, a number overrides; DSH_TRIM_PRUNER wins
-        # ── preset tuning (used by the `/trim preset` command) ──────────────
-        # Fraction of each routed model's window at which the GENERATED preset
-        # makes compaction fire. This only writes that preset's compaction-basic
-        # `thresholdRatio` (plus a headroom computed to let the ratio decide); it
-        # never changes this plugin's own trimming behaviour.
-        compactionTargetRatio: 0.8
-        # Route the generated preset's summarization call runs on. Optional, and
-        # must be a complete provider+model pair (dsh rejects a half-set pair).
-        # Both strings must match the session route exactly - the settings.yaml
-        # route key and the model id that backend serves.
-        # compactionRoute:
-        #   provider: opencode-go-v41
-        #   model: deepseek-v4.1-flash
+
+# ── the compaction half ──────────────────────────────────────────────────────
+# A bundle can declare more than one row, and a row is a loader entry: its own config
+# namespace, its own fiber, its own switch on the Plugins page. So the two halves are
+# switched and tuned independently. `role` is how one module knows which half an entry
+# is, because the host hands the entry its module name, not its row id.
+- insert:
+    - id: context-trim-tuning
+      name: dsh-command-context-trim
+      config:
+        role: tuning
+        # Only `role` is set here, and that is deliberate. Anything written in this block is an EXPLICIT override
+        # the tuning row publishes over the trim row, so writing the defaults would silently undo the compaction
+        # knobs a pre-split profile still has on its `context-trim` row. The knobs and their defaults:
+        #
+        #   compactionTargetRatio: 0.8      # fraction of each routed window at which compaction fires
+        #   compactionRoute:                # "provider:model" the generated preset summarises on
+        #   autoTuneCompaction: false       # retune this profile's compaction row at runtime
+        #   tuneStockDisabledRoutes: false  # also tune routes whose stock headroom disables the trigger
+        #   prunerThresholdChars            # 'auto' derives it from the routed window; 0 opts out, a number overrides
+        #
+        # Copy one in here to override it; the values live in `lib/config.js` (DEFAULTS).

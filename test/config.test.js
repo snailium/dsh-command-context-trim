@@ -79,3 +79,62 @@ test('DSH_TRIM_AUTO_TUNE overrides the profile switch, and an unset variable mea
 		else process.env[AUTO_TUNE_ENV] = previous;
 	}
 });
+
+test('role says which half an entry is, and defaults to the full trimmer', async () => {
+	// One bundle ships two rows, and an entry cannot see its own row id, so the role travels in its config. Absent
+	// means the whole plugin, which is exactly what a single-row install was.
+	const { resolveConfig } = await import('../lib/config.js');
+	assert.equal(resolveConfig({}).role, 'trim');
+	assert.equal(resolveConfig({ role: 'trim' }).role, 'trim');
+	assert.equal(resolveConfig({ role: 'tuning' }).role, 'tuning');
+	assert.throws(() => resolveConfig({ role: 'nope' }), /role must be "trim" or "tuning"/u);
+	assert.throws(() => resolveConfig({ role: 1 }), /role must be "trim" or "tuning"/u);
+});
+
+test('the split is additive: a pre-split profile keeps its compaction knobs on the trim row', async () => {
+	// The failure this guards against is silent and one-sided: the tuning row carries the bundle's defaults, so
+	// merging its whole configuration over a pre-split trim row would turn a working `autoTuneCompaction: true`
+	// back off. Only keys the deployment actually wrote may travel, so the tuning row contributes overrides only.
+	const { readConfig } = await import('../lib/config.js');
+	const { explicitOverridesFor } = await import('../lib/index.js');
+
+	// A profile from before the split: everything on one row, auto-tune on.
+	const legacyTrimRow = { role: 'trim', autoTuneCompaction: true, prunerThresholdChars: 32768, retainRatio: 0.16 };
+	// What a fresh install's tuning row looks like: ONLY `role`. The bundle patch deliberately sets nothing else
+	// there, because whatever a row writes is an override the trim row has to yield to, and writing the defaults
+	// would undo a pre-split profile's own values. That is the whole reason the config block documents the knobs
+	// as comments instead of values.
+	const freshTuningRow = { role: 'tuning' };
+
+	// With the tuning row switched off it publishes nothing, so the trim row is what a read sees.
+	assert.deepEqual(readConfig(legacyTrimRow).autoTuneCompaction, true, 'a pre-split profile keeps auto-tune on');
+	assert.equal(readConfig(legacyTrimRow).prunerThresholdChars, 32768);
+
+	// With the tuning row on but untouched, it must not override what the trim row already says.
+	const overrides = explicitOverridesFor(freshTuningRow);
+	assert.deepEqual(overrides, {}, 'an untouched tuning row overrides nothing');
+	assert.equal(readConfig({ ...legacyTrimRow, ...overrides }).autoTuneCompaction, true);
+
+	// Once the tuning row IS edited, its own value is what the card and the tuner use.
+	const edited = explicitOverridesFor({ ...freshTuningRow, autoTuneCompaction: false, prunerThresholdChars: 0 });
+	assert.deepEqual(edited, { autoTuneCompaction: false, prunerThresholdChars: 0 });
+	assert.equal(readConfig({ ...legacyTrimRow, ...edited }).prunerThresholdChars, 0, 'the tuning row wins once it is set');
+});
+
+test('a tuning row writes a real boolean, and only the keys it sets', async () => {
+	// The card stages text, so a tuning row's config carries volatile handles rather than plain values. The
+	// overrides must unwrap them, or the merged read would see an object where a boolean belongs.
+	const { explicitOverridesFor } = await import('../lib/index.js');
+	const handle = (value) => ({ get: () => value });
+	const overrides = explicitOverridesFor({
+		role: 'tuning',
+		autoTuneCompaction: handle(true),
+		tuneStockDisabledRoutes: handle(false),
+		prunerThresholdChars: handle(16384),
+		retainRatio: 0.3,
+		role2: 'ignored'
+	});
+	assert.deepEqual(overrides, { autoTuneCompaction: true, tuneStockDisabledRoutes: false, prunerThresholdChars: 16384 });
+	assert.equal(typeof overrides.autoTuneCompaction, 'boolean', 'a handle unwraps to its value');
+	assert.equal('retainRatio' in overrides, false, 'a trims knob never travels from the tuning row');
+});

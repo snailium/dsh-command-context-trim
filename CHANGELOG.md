@@ -5,6 +5,37 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-29
+
+### Added
+
+- **The plugin is now two rows, so its halves can be switched and tuned independently.** One bundle can declare more
+  than one row, and a row is a loader entry with its own config namespace and its own fiber. `context-trim` owns the
+  trims (`/trim`, and the automatic trim when a request hits the model's context wall); the new `context-trim-tuning`
+  owns when compaction fires and how hard the tool-result pruner clips. Each has its own switch on the Plugins page, and
+  switching one off leaves the other running — verified on isolated instances of 0.2.0 and 0.1.7, where turning
+  `context-trim-tuning` off left `context-trim` and `/trim` untouched.
+
+  An entry is **not** told its own row id — `ctx.fiber.name` is the module name for both rows — so the half is declared
+  in config as `role: trim | tuning`, defaulting to `trim`, which is exactly what a single-row install was.
+
+### Fixed
+
+- Two rows from one module no longer collide on the `/trim` command. The tuning half owns no command, so switching it
+  off does not make `/trim` disappear.
+- The split is **additive**: a profile that predates it keeps every compaction knob on its `context-trim` row and loses
+  nothing. The tuning row publishes only the keys a deployment **explicitly sets**, and the shipped bundle patch sets
+  nothing there but `role` — its documented knobs are comments. Merging the tuning row's *defaults* over a pre-split
+  trim row would have silently turned a working `autoTuneCompaction: true` back off. The knob values themselves stay in
+  `lib/config.js` (`DEFAULTS`), which is where they were already decided.
+
+### Notes
+
+- The knobs `/trim` actually obeys (retainRatio, protectHeadNodes, emergencyTrim, maxAutoTrimRetries, allowTailTrim,
+  preferInPlacePrune) still have no settings card: they are not marked `.volatile()`. The tuning half's five do, which
+  is why the card so far has shown only compaction tuning under a `/trim` row. Exposing the trims' own knobs is the
+  natural follow-up now that it is a row of its own.
+
 ## [0.5.1] - 2026-09-29
 
 ### Fixed
@@ -730,7 +761,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/snailium/dsh-command-context-trim/compare/v0.4.8...v0.4.9

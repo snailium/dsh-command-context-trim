@@ -47,6 +47,19 @@ test('the shipped bundle derives the pruner threshold instead of pinning the old
 	// Regression: 0.3.2's patch pinned `prunerThresholdChars: 0`, which is an explicit opt-out. It stayed behind
 	// after 0.3.5 made the value derivable, so every install of our own bundle kept the pruner at stock 8192 —
 	// found live, in an isolated instance whose preset row still said thresholdChars: 8192.
-	const text = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
-	assert.match(text, /prunerThresholdChars: auto/u, 'the bundle must not pin the old opt-out');
+	// The knobs the tuning row documents now live in comments, because that row must set nothing: whatever it
+	// writes is an override the trim row yields to, so pinning the default there would undo a pre-split profile's
+	// own value. So the guard is on the *config lines* — a non-comment assignment — and the value itself is pinned
+	// where it is actually decided, in DEFAULTS.
+	const configLines = (await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8'))
+		.split('\n')
+		.filter((line) => /^\s*[a-zA-Z]\w*:/.test(line));
+	assert.equal(
+		configLines.filter((line) => /^\s*prunerThresholdChars:/.test(line)).length,
+		0,
+		'the bundle must not pin the pruner threshold on either row'
+	);
+	const { DEFAULTS } = await import('../lib/config.js');
+	assert.equal(DEFAULTS.prunerThresholdChars, 'auto', 'the default derives the threshold instead of opting out');
+	assert.notEqual(DEFAULTS.prunerThresholdChars, 0, 'and is not the old explicit opt-out');
 });
