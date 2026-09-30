@@ -5,6 +5,26 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-09-29
+
+### Documentation
+
+- **Stated which plugin version belongs on which dsh line.** There is no peer dependency to enforce it, so it was
+  only discoverable by trying: dsh 0.1.5 can only run this plugin's 0.1.x line, and from 0.2.0 the latest build
+  serves both 0.1.7 and 0.2.0. The 0.1.5 boundary is worth stating loudly because its failure is the quiet kind —
+  the plugin still loads and `/trim` still works, but the card silently never appears, since 0.1.5 predates both
+  `configForms` and schemastery's `.volatile()`. The 0.2.0 floor is separate and older: that line refuses a card
+  write from any build before 0.5.0, because it validates the operation against the schema where 0.1.7's
+  `.volatile()` had let the string `"true"` through.
+- `0.2.0-rc.2` added to the manifest's declared dsh releases, now that the card write path is verified on it.
+
+### Internal
+
+- `publish.yml` gained a `deprecate` input: comma-separated versions to mark deprecated instead of publishing, with
+  each version's reason held in the workflow so the text is reviewed in a diff rather than typed into a web form, and
+  an unknown version failing the run rather than quietly marking nothing. Used to mark 0.6.0-0.6.2.
+
+
 ## [0.6.3] - 2026-09-29
 
 ### Changed
@@ -832,7 +852,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.0...v0.6.1

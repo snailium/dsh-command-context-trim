@@ -2,7 +2,7 @@
 
 [English →](README.md)
 
-<!-- synced-with-readme: 0.6.3 -->
+<!-- synced-with-readme: 0.6.4 -->
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加一个**不调用任何模型**的 `/trim`：
 在真正溢出之前，把对话里最旧、最不重要的一段上下文裁掉，让会话能切到**窗口更小的模型**上继续跑；同时可以按路由
@@ -130,6 +130,28 @@ coverage: 4 route(s) configured, 3 covered by this preset, 1 not covered.
 `retainTokens` / `minTailTokens`）逐字保留最近上下文；`allowTailTrim` 控制最后手段的层级。
 
 ## 兼容性
+
+
+### 该装哪个插件版本
+
+这里没有 peer 依赖来强制这条规则，所以只能写在这里、需要人去读：**dsh 0.1.5 只能配本插件的 0.1.x。**
+0.2.0 起直接装最新版。0.1.7 和 0.2.0 差别不大，同一个构建两边都能用。
+
+| dsh | 装哪个 | 原因 |
+|---|---|---|
+| 0.1.2-rc.1 | `0.1.x` | devDependency 里钉死的下限 |
+| 0.1.5-rc.2 / 0.1.5-rc.3 | **只能用 `0.1.x`** | 设置卡片需要 `configForms` 和 schemastery 的 `.volatile()`，0.1.5 两样都没有 |
+| 0.1.7-rc.2 | 最新版（0.6.x） | 到 0.2.0 为止，本插件做的事都没变 |
+| 0.2.0-rc.2 | 最新版（0.6.x） | 第一条能在这条线上正确保存卡片写入的版本 |
+
+0.1.5 被单独划出来而不是"降级可用"：它早于卡片契约的两半。它的 web 宿主不提供 `configForms` 服务，没有表单可渲染、
+也就无处可存；它的 schemastery 早于 `.volatile()`，而那是把字段放上卡片的唯一条件。插件在那里仍然能加载、`/trim`
+仍然能用——客户端半边会检测到缺失的服务然后什么都不注册，而不是在页面里抛错——所以失败形态是"卡片悄悄不出现"，
+而不是启动报错。这是最不该让人去猜的一种失败，所以写在这里。
+
+0.2.0 线上真正变化的是**保存路径**。0.1.7 时代的构建会把布尔值按字符串 `"true"` 暂存，`.volatile()` 过去会放行；
+0.2.0 按 schema 校验这次操作并带内拒绝——没有 HTTP 错误，console 也没有输出。**0.5.0** 修好了，它写的是正确类型的值。
+所以在拆分两行和改名之前，0.2.0 就已经需要 0.5.0 以上了。
 
 **session format v4 下的标记来源。** 替换消息携带来源 kind `plugin:dsh-command-context-trim` —— v4 要求的
 `plugin:<plugin id>` 形状 —— 因为 0.1.7 的准入路径会拒绝已退休的 `{kind: 'plugin'}` 包装，报

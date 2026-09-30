@@ -269,6 +269,32 @@ tail is a hard boundary and the final message is never dropped.
 
 ## Compatibility
 
+### Which plugin version to install on which dsh
+
+There is no peer dependency to enforce this, so it is stated here and has to be read: **dsh 0.1.5 can only run this
+plugin's 0.1.x line.** From 0.2.0 onwards, install the latest. 0.1.7 and 0.2.0 are close enough that the same build
+serves both.
+
+| dsh | install | why |
+|---|---|---|
+| 0.1.2-rc.1 | `0.1.x` | the pinned devDependency floor |
+| 0.1.5-rc.2 / 0.1.5-rc.3 | **`0.1.x` only** | the settings card needs `configForms` and schemastery's `.volatile()`, and 0.1.5 has neither — see below |
+| 0.1.7-rc.2 | latest (0.6.x) | unchanged in 0.2.0 for everything this plugin does |
+| 0.2.0-rc.2 | latest (0.6.x) | the first release that saves a card write correctly on this line |
+
+Why 0.1.5 is fenced off rather than merely degraded: 0.1.5 predates both halves of the card contract. Its web host
+serves no `configForms` service, so there is no form to render and nothing to save into, and its schemastery predates
+`.volatile()`, which is the only thing that puts a field on a card at all. The plugin still loads there and `/trim`
+still works — the client half detects the missing service and registers nothing rather than throwing inside the page —
+so the failure is a card that silently never appears, not a boot error. That is the worst shape for a version boundary,
+which is why it is called out here instead of being left to be discovered.
+
+The 0.2.0 line is where the *save* path changed. A 0.1.7-era build stages a boolean as the string `"true"`, which
+`.volatile()` used to let through; 0.2.0 validates the operation against the schema and refuses it in band, with no
+HTTP error and no console output. Fixed in **0.5.0**, which writes correctly typed values. So: 0.2.0 needs 0.5.0 or
+later even before the two-row split and the rename.
+
+
 **Marker provenance under session format v4.** The replacement message carries the source kind
 `plugin:dsh-command-context-trim` — the `plugin:<plugin id>` shape v4 requires — because 0.1.7's admission path
 refuses the retired `{kind: 'plugin'}` wrapper with `format v4 message requires a producer-owned source kind`.
@@ -296,6 +322,7 @@ need. Verified state, by feature:
 | 0.1.2-rc.1 (the pinned devDependency floor) | ✅ | ✅ | ✅ | ❌ clear error | ❌ absent |
 | 0.1.5-rc.3 | ✅ | ✅ | ✅ | ❌ clear error | ❌ absent |
 | 0.1.7-rc.2 (`next`) | ✅ | ✅ | ✅ | ✅ | ✅ (schemastery ≥ 3.18.4) |
+| 0.2.0-rc.2 | ✅ | ✅ | ✅ | ✅ | ✅ (two cards, one per row — needs 0.5.0+) |
 
 What the ❌ entries mean in practice:
 

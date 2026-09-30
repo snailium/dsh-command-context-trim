@@ -36,6 +36,10 @@ on:
         description: 'Print the OIDC token claims npm matches against (no publish)'
         type: boolean
         default: false
+      deprecate:
+        description: 'Comma-separated versions to mark deprecated instead of publishing (e.g. 0.6.0,0.6.1)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -68,6 +72,7 @@ jobs:
 
       # npm versions are immutable: never let a red run look like a release.
       - name: Refuse to republish an existing version
+        if: ${{ inputs.deprecate == '' }}
         run: |
           set -euo pipefail
           NAME=$(node -p "require('./package.json').name")
@@ -111,8 +116,31 @@ jobs:
           node -e 'const p=process.argv[1].split(".")[1];console.log(JSON.stringify(JSON.parse(Buffer.from(p,"base64url").toString()),null,2))' "$TOKEN"
 
       # The only line that proves success: `+ <package>@<version>`.
+      # Marking a version deprecated is a write like any other, so it needs the same OIDC auth. The reason travels
+      # with the version it describes and is kept HERE rather than passed as a free-text input, so the text is reviewed
+      # in a diff instead of typed into a web form. A version with no case below is a mistake, not a no-op: the step
+      # fails loudly rather than quietly marking nothing.
+      - name: Deprecate
+        if: ${{ inputs.deprecate != '' }}
+        env:
+          VERSIONS: ${{ inputs.deprecate }}
+        run: |
+          set -euo pipefail
+          for version in ${VERSIONS//,/ }; do
+            version="${version// /}"
+            [ -z "$version" ] && continue
+            case "$version" in
+              0.6.0) reason="Split into two rows, but a profile that has not run scripts/migrate-rows.mjs SILENTLY loses automatic compaction tuning (registerAutoTune reads only its own row). Superseded by 0.6.3." ;;
+              0.6.1) reason="Half state: the tuning surface moved to /trim-tune, but the tuning row had no settings card yet. Superseded by 0.6.3." ;;
+              0.6.2) reason="Two cards, but under the old names. Superseded by 0.6.3, which renames the row to context-tuning and the command to /context-tune." ;;
+              *) echo "::error::No deprecation reason is recorded for $version - add one to this workflow first."; exit 1 ;;
+            esac
+            echo "Marking $version deprecated"
+            npm deprecate "dsh-command-context-trim@$version" "$reason"
+          done
+
       - name: Publish
-        if: ${{ !inputs.dry-run }}
+        if: ${{ !inputs.dry-run && inputs.deprecate == '' }}
         run: npm publish --access public --provenance
 
       - name: Dry run
