@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { DEFAULTS } from '../lib/config.js';
 
 /**
  * The client half is a classic script, so it cannot be imported like a module — it
@@ -95,6 +96,19 @@ function stubs() {
 }
 
 /** A browser plugin context that records what the bundle registers. */
+/**
+ * The registration for one row's card. Two rows means two keyed entries, and `registered[0]` is only the first of them,
+ * so a test about the tuner's card has to name the row rather than take whatever came first.
+ * @param {object[]} registered - what the stub recorded.
+ * @param {string} rowId - `context-trim` or `context-trim-tuning`.
+ * @returns the registration whose key ends with that row id.
+ */
+function cardFor(registered, rowId) {
+	const found = registered.find((entry) => entry.options.key.endsWith(`#${rowId}`));
+	assert.ok(found !== undefined, `no card registered for ${rowId}; keys: ${registered.map((e) => e.options.key).join(', ')}`);
+	return found;
+}
+
 function stubContext() {
 	const registered = [];
 	const scopes = [];
@@ -102,16 +116,17 @@ function stubContext() {
 	let revision = 7;
 	// The Host's effective configuration, which a landed write really changes — without this, a second save of the
 	// same value would look like "nothing to do" and the test would be measuring the stub, not the card.
-	const value = {
-		compactionTargetRatio: 0.8,
-		autoTuneCompaction: false,
-		tuneStockDisabledRoutes: false,
-		prunerThresholdChars: 'auto'
+	const values = {
+		'context-trim-tuning': { role: 'tuning', compactionTargetRatio: 0.8, autoTuneCompaction: false, tuneStockDisabledRoutes: false, prunerThresholdChars: 'auto' },
+		'context-trim': { role: 'trim', targetRatio: 0.9, retainRatio: 0.16, minTailTokens: 2048, reserveOutputTokens: 8192, protectHeadNodes: 1, maxAutoTrimRetries: 3, allowTailTrim: true, autoTrim: true, emergencyTrim: true, preferInPlacePrune: true, pruneThresholdChars: 8192, pruneHeadChars: 4096, pruneTailChars: 1024 }
 	};
 	const context = {
 		configForms: {
 			get: (id) => {
 				scopes.push(id);
+				// Each row is its own entry with its own config namespace, so each gets its own scope. The key sets are
+				// disjoint — the trims' thirteen and the tuner's five — exactly as in the loader schema. `values[id]` is
+				// the object a landed write mutates, so the snapshot and the write path must read the same one.
 				// The scope the Host hands out: a snapshot of the *typed* effective configuration, a subscription for
 				// external changes, and the fenced write. Note the types — the deployment's configuration is booleans
 				// and numbers, which is exactly what a save has to write back (a card that stages the string "true"
@@ -122,13 +137,13 @@ function stubContext() {
 						status: 'ready',
 						writable: true,
 						revision,
-						value,
+						value: values[id],
 						base: {}
 					}),
 					subscribe: () => () => undefined,
 					mutate: async (ops, fence) => {
 						mutations.push({ ops, fence });
-						for (const op of ops) value[op.path[0]] = op.value;
+						for (const op of ops) values[id][op.path[0]] = op.value;
 						revision += 1;
 						return true;
 					}
@@ -158,18 +173,25 @@ test('the bundle registers into the keyed row slot behind the served namespace o
 
 	const { context, registered, scopes } = stubContext();
 	exports.apply(context);
-	assert.deepEqual(scopes, ['context-trim'], 'the card binds the loader entry id');
-	assert.equal(registered.length, 1);
+			// One scope per row: each row is its own entry with its own config namespace, and a card that reached for the
+		// wrong one would write the tuner's values into the trims' row.
+		assert.deepEqual(scopes, ['context-trim', 'context-trim-tuning'], 'each card binds its own row namespace');
 	// The row slot, keyed `<package>#<row id>`. This is the whole reason a third-party bundle does NOT use
 	// `plugins.item`: that slot belongs to the official settings pages, and a card parked there renders under
 	// "Official" while its Save is refused (measured on 0.2.0).
-	assert.equal(registered[0].options.name, 'plugins.row.config');
-	assert.equal(registered[0].options.key, 'dsh-command-context-trim#context-trim');
-	assert.equal(registered[0].options.locale, 'settings.context-trim');
-	assert.equal(registered[0].options.label, undefined, 'a keyed slot takes its heading from the bundle patch');
+	// One keyed entry per row, or a row simply has no Configure button and nothing is logged.
+	assert.equal(registered.length, 2, 'one card per row');
+	for (const row of ['context-trim', 'context-trim-tuning']) {
+		const { options } = cardFor(registered, row);
+		assert.equal(options.name, 'plugins.row.config');
+		assert.equal(options.key, `dsh-command-context-trim#${row}`);
+		assert.equal(options.locale, 'settings.context-trim');
+		assert.equal(options.label, undefined, 'a keyed slot takes its heading from the bundle patch');
+	}
 	// The card does NOT use the primitives' SettingsFormModel (it stages text and cannot write a typed value), so
 	// what matters is that every field declares the type it has to be written as.
-	assert.deepEqual(registration.factory(require_stub()).CARD_FIELDS.map((field) => [field.key, field.kind]), [
+		const { CARD_FIELDS } = registration.factory(require_stub());
+	assert.deepEqual(CARD_FIELDS.tuning.map((field) => [field.key, field.kind]), [
 		['compactionTargetRatio', 'number'],
 		['compactionRoute', 'text'],
 		['autoTuneCompaction', 'boolean'],
@@ -184,7 +206,12 @@ test('the component returns the summary one-liner and the five-field form body',
 	registration.factory((id) => (id === 'react' ? react : primitives));
 	const { context, registered } = stubContext();
 	registration.factory((id) => (id === 'react' ? react : primitives)).apply(context);
-	const { options, component } = registered[0];
+	const { options, component: wrapper } = cardFor(registered, 'context-trim-tuning');
+	// The wrapper builds a React element rather than returning the card, so unwrap it the way React would.
+	const element = wrapper({ t: (key) => key, view: 'summary', useTrimCard: () => ({}) });
+	const component = element.type;
+	assert.equal(typeof component, 'function', 'the wrapper must render a component');
+	assert.equal(typeof component, 'function', 'the wrapper must render a component');
 	const injected = options.inject();
 	// The slot renderer turns `hooks.<name>` into a `use<Name>` prop, so what goes in must be a store the shell can
 	// subscribe to — an object with getSnapshot and subscribe, exactly like the in-box cards' own.
@@ -195,8 +222,10 @@ test('the component returns the summary one-liner and the five-field form body',
 
 	// The component reads its store hook before branching on the view, exactly like the
 	// in-box cards, so the harness supplies it for the summary view too.
+	// `row` is what the two registrations pass down; without it a card cannot tell which half it is.
 	const props = {
 		t: (key) => key,
+		row: { rowId: 'context-trim-tuning', role: 'tuning', module: 'tune' },
 		useTrimCard: (select) => select(injected.hooks.trimCard.getSnapshot()),
 		...injected
 	};
@@ -216,12 +245,14 @@ test('the component returns the summary one-liner and the five-field form body',
 	// Section headings are plain nodes inside the form body (SettingsForm renders props.children directly).
 	// The stub keeps children on the node (`{type, props, children}`), not inside props.
 	const headingText = (node) => JSON.stringify(node.children ?? '');
-	assert.ok(headingText(tree.children[0]).includes('sectionCompaction'), 'the Compaction section comes first');
-	assert.ok(headingText(tree.children[5]).includes('sectionPrune'), 'the Prune section comes before the pruner control');
+	// children[0] is now the card's one-line introduction, which is what tells the two cards apart in the UI.
+	assert.ok(headingText(tree.children[0]).includes('cardTuneIntro'), 'the card says which component it configures');
+	assert.ok(headingText(tree.children[1]).includes('sectionCompaction'), 'then the Compaction section');
+	assert.ok(headingText(tree.children[6]).includes('sectionPrune'), 'then the Prune section, before the pruner control');
 
 	// The two text controls stay ordinary value fields.
-	const ratio = tree.children[1];
-	const route = tree.children[2];
+	const ratio = tree.children[2];
+	const route = tree.children[3];
 	assert.equal(ratio.props.numeric, true);
 	assert.equal(ratio.props.hint, 'compactionTargetRatioHint');
 	// `onEdit` is fire-and-forget now: it stages into the card's own draft, and what it stages is
@@ -232,7 +263,7 @@ test('the component returns the summary one-liner and the five-field form body',
 	assert.equal(typeof route.props.onReset, 'function', 'reset goes through the card\'s own action');
 
 	// Auto tune is a switch, and its state comes from the effective value (FIELD_DEFAULTS), never from a blank field.
-	const autoSwitch = tree.children[3];
+	const autoSwitch = tree.children[4];
 	const autoControl = autoSwitch.children[0].children[1];
 	assert.equal(autoControl.type?.name, 'Switch', 'the shell ships the switch control');
 	const autoButton = autoControl;
@@ -243,13 +274,13 @@ test('the component returns the summary one-liner and the five-field form body',
 	assert.ok(autoHint.includes('strong'), 'and it is bold');
 
 	// Enable stock-disabled routes is a switch too.
-	const stockSwitch = tree.children[4];
+	const stockSwitch = tree.children[5];
 	const stockButton = stockSwitch.children[0].children[1];
 	assert.equal(stockButton.type?.name, 'Switch');
 	assert.equal(stockButton.props.checked, false);
 
 	// The pruner: a mode select plus a number box that only exists for Custom.
-	const pruner = tree.children[6];
+	const pruner = tree.children[7];
 	const select = pruner.children[0].children[1];
 	assert.equal(select.props.value, 'auto', 'an unset threshold renders as Auto, not blank');
 	assert.deepEqual(select.children.map((option) => option.props.value), ['disabled', 'auto', 'custom']);
@@ -257,16 +288,16 @@ test('the component returns the summary one-liner and the five-field form body',
 
 	// The select is a real control, and what it stages is written as a typed value: Disabled is the number 0, not
 	// the string "0" the schema would reject on 0.2.0.
-	const { mutations } = stubContext();
+	// Driven through the TUNING card: `prunerThresholdChars` is the tuner's field, and a card that reached the trim row
+	// would write the tuner's value into the wrong namespace.
 	const fresh = stubs();
 	const harness = stubContext();
 	const second = (await loadBundle()).factory((id) => (id === 'react' ? fresh.react : fresh.primitives));
 	second.apply(harness.context);
-	const live = harness.registered[0].options.inject();
+	const live = cardFor(harness.registered, 'context-trim-tuning').options.inject();
 	live.edit('prunerThresholdChars', '0');
 	await live.save();
 	assert.deepEqual(harness.mutations[0].ops, [{ op: 'set', path: ['prunerThresholdChars'], value: 0 }]);
-	mutations.length = 0;
 
 	assert.equal(typeof tree.props.onSave, 'function');
 	assert.equal(typeof tree.props.onDiscard, 'function');
@@ -286,7 +317,7 @@ test('the card\'s default mirror matches the plugin\'s own defaults', async () =
 	// drift, the page quietly lies about what the plugin will do.
 	const { DEFAULTS } = await import('../lib/config.js');
 	const exported = (await loadBundle()).factory(require_stub()).FIELD_DEFAULTS;
-	for (const field of ['compactionTargetRatio', 'autoTuneCompaction', 'tuneStockDisabledRoutes', 'prunerThresholdChars']) {
+	for (const field of ['compactionTargetRatio', 'autoTuneCompaction', 'tuneStockDisabledRoutes']) {
 		assert.equal(exported[field], DEFAULTS[field], `${field} mirror must match DEFAULTS`);
 	}
 	// `compactionRoute` has no default at all; the card shows an empty field for it.
@@ -312,7 +343,7 @@ test('a staged switch is written as a boolean, not as the string "true"', async 
 	const factory = (id) => (id === 'react' ? react : primitives);
 	const { context, registered, mutations } = stubContext();
 	registration.factory(factory).apply(context);
-	const { options } = registered[0];
+	const { options } = cardFor(registered, 'context-trim-tuning');
 	const injected = options.inject();
 
 	injected.edit('autoTuneCompaction', 'true');
@@ -336,7 +367,7 @@ test('the pruner writes "auto" or a number, and a reset drops the edit instead o
 	const factory = (id) => (id === 'react' ? react : primitives);
 	const { context, registered, mutations } = stubContext();
 	registration.factory(factory).apply(context);
-	const injected = registered[0].options.inject();
+	const injected = cardFor(registered, 'context-trim-tuning').options.inject();
 
 	injected.edit('prunerThresholdChars', '16384');
 	await injected.save();
@@ -352,4 +383,83 @@ test('the pruner writes "auto" or a number, and a reset drops the edit instead o
 	injected.resetField('prunerThresholdChars');
 	await injected.save();
 	assert.equal(mutations.length, 2, 'a reset alone writes nothing');
+});
+
+test('each half owns its own fields, and the two similar names never cross over', async () => {
+	// `pruneThresholdChars` is the trims' own in-place pruner (a character count on one tool result);
+	// `prunerThresholdChars` is the tuner's threshold, on the other row, with its own default of 'auto'. They differ
+	// by one letter, and a card that showed the wrong one would be worse than no card at all.
+	const { TRIM_CARD_FIELDS, TUNING_CARD_FIELDS } = (await loadBundle()).factory(require_stub());
+	const trims = TRIM_CARD_FIELDS.map((f) => f.key);
+	const tuner = TUNING_CARD_FIELDS.map((f) => f.key);
+	assert.ok(trims.includes('pruneThresholdChars') && !trims.includes('prunerThresholdChars'));
+	assert.ok(tuner.includes('prunerThresholdChars') && !tuner.includes('pruneThresholdChars'));
+	for (const key of trims) assert.equal(tuner.includes(key), false, `${key} must appear on exactly one card`);
+	for (const key of tuner) assert.equal(trims.includes(key), false, `${key} must appear on exactly one card`);
+	// And the card's own default mirrors the plugin's, so an unset field shows what will really happen.
+	for (const field of [...TRIM_CARD_FIELDS, ...TUNING_CARD_FIELDS]) {
+		// `prunerThresholdChars` is the tuner's own default and lives on the other row's schema; `compactionRoute` has
+		// no default at all, by design — an unset route means "the session's own route".
+		if (field.key === 'prunerThresholdChars' || field.key === 'compactionRoute') continue;
+		assert.equal(field.default, DEFAULTS[field.key], `${field.key} default must match DEFAULTS`);
+	}
+	assert.equal(DEFAULTS.compactionRoute, undefined, 'the route is deliberately unset by default');
+	// The two similar names BOTH exist in DEFAULTS, with different values — which is exactly why they are told apart
+	// by key and never by value: the trims' is a character count, the tuner's is 'auto' or a number.
+	assert.equal(DEFAULTS.pruneThresholdChars, 8192, "the trims' own in-place pruner threshold");
+	assert.equal(DEFAULTS.prunerThresholdChars, 'auto', "the tuner's pruner threshold");
+});
+
+test('each row renders its OWN card: the trims get their thirteen knobs, the tuner its five', async () => {
+	// The whole point of the split. Before it, there was one card, bound to the trim row, showing the tuner's five
+	// fields under a row named `/trim` — so the trims had no settings of their own and the visible knobs belonged to a
+	// different component. Each card must now render only its own row's fields, from its own row's config namespace.
+	const registration = await loadBundle();
+	const { primitives, react } = stubs();
+	const factory = (id) => (id === 'react' ? react : primitives);
+	const { context, registered, mutations } = stubContext();
+	registration.factory(factory).apply(context);
+
+	const render = (rowId) => {
+		const { options, component: wrapper } = cardFor(registered, rowId);
+		const injected = options.inject();
+		const element = wrapper({ t: (key) => key, view: 'page', useTrimCard: (select) => select(injected.hooks.trimCard.getSnapshot()), ...injected });
+		return { injected, tree: element.type(element.props) };
+	};
+
+	// ── the trim card ──────────────────────────────────────────────────────────
+	const trim = render('context-trim');
+	assert.equal(trim.tree.type, primitives.SettingsForm, 'the platform still supplies the frame');
+	const idsIn = (tree) => [...new Set((JSON.stringify(tree).match(/plugin-config-(?:trim|tune)-[A-Za-z-]+/gu) ?? []))];
+	const trimIds = idsIn(trim.tree);
+	for (const key of ['targetRatio', 'retainRatio', 'minTailTokens', 'autoTrim', 'emergencyTrim', 'pruneThresholdChars']) {
+		assert.ok(trimIds.includes(`plugin-config-trim-${key}`), `the trim card shows ${key}`);
+	}
+	for (const key of ['compactionTargetRatio', 'auto-tune', 'pruner-threshold']) {
+		assert.equal(trimIds.includes(`plugin-config-tune-${key}`), false, `the trim card must NOT show the tuner's ${key}`);
+	}
+	assert.ok(JSON.stringify(trim.tree).includes('sectionTrims'), 'and it has its own section heading');
+	assert.ok(JSON.stringify(trim.tree).includes('cardTrimIntro'), 'each card says which component it configures');
+
+	// A staged edit on the trim card writes to the TRIM row's namespace, typed.
+	trim.injected.edit('autoTrim', 'false');
+	trim.injected.edit('retainRatio', '0.2');
+	await trim.injected.save();
+	assert.deepEqual(mutations[0].ops, [
+		{ op: 'set', path: ['retainRatio'], value: 0.2 },
+		{ op: 'set', path: ['autoTrim'], value: false }
+	], 'booleans and numbers, written from the trim row');
+
+	// ── the tune card ──────────────────────────────────────────────────────────
+	const tune = render('context-trim-tuning');
+	const tuneIds = idsIn(tune.tree);
+	for (const key of ['compactionTargetRatio', 'compactionRoute', 'auto-tune', 'stock-disabled', 'pruner-threshold', 'pruner-mode']) {
+		assert.ok(tuneIds.includes(`plugin-config-tune-${key}`), `the tune card shows ${key}`);
+	}
+	for (const key of ['targetRatio', 'retainRatio', 'emergencyTrim', 'pruneThresholdChars']) {
+		assert.equal(tuneIds.includes(`plugin-config-trim-${key}`), false, `the tune card must NOT show the trims' ${key}`);
+	}
+	// Every id is namespaced by its row, so the two cards can never be confused for each other in the DOM.
+	assert.equal(trimIds.some((id) => id.startsWith('plugin-config-tune-')), false, 'the trim card owns only its prefix');
+	assert.equal(tuneIds.some((id) => id.startsWith('plugin-config-trim-')), false, 'the tune card owns only its prefix');
 });

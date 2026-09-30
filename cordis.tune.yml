@@ -1,0 +1,20 @@
+# dsh-command-context-trim — the compaction-tuning row, documented.
+#
+# The declaration itself lives in ./cordis.patch.yml, because a bundle mounts ONE patch file (`dsh.bundle.patch`)
+# and a second one is never read. This file exists so the row's knobs and the reasoning behind them stay readable
+# next to the code they configure.
+#
+# Why the two rows cannot have different headings: a row's heading on the Plugins page comes from its **module**,
+# and a bundle has exactly one module name. dsh also resolves a row's `meta` by module name (`metaOf(name, base)`),
+# so two rows on one module share one meta and a per-row `meta.title` would not separate them either. Giving the
+# row its own module (a `./tune` subpath entry) does change the name — and is what this file was first written for —
+# but then the two rows would be two MODULES, and the shared implementation would have to be reached across them.
+# The switch and the settings are per row either way, so the cards carry the distinction instead.
+#
+# The knobs, and their defaults (which live in lib/config.js, DEFAULTS):
+#
+#   compactionTargetRatio: 0.8      fraction of each routed window at which compaction fires
+#   compactionRoute:                "provider:model" the generated preset summarises on
+#   autoTuneCompaction: false       retune this profile's compaction row at runtime
+#   tuneStockDisabledRoutes: false  also tune routes whose stock headroom disables the trigger
+#   prunerThresholdChars            'auto' derives it from the routed window; 0 opts out, a number overrides

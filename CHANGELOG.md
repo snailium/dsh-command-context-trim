@@ -5,6 +5,34 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-09-29
+
+### Added
+
+- **Two settings cards, one per row, each showing only its own knobs.** `plugins.row.config` is a keyed slot: a
+  registration only renders on the row whose key matches, so one card left the other row with no Configure button and
+  nothing logged. Each row now has its own keyed entry, gated on its own namespace, and each card carries only that
+  row's fields — verified in an isolated 0.2.0 instance, where the `context-trim` card shows 13 controls and none of
+  the tuner's, and the `context-trim-tuning` card the reverse.
+- **The trims have settings of their own for the first time.** Their thirteen knobs (`targetRatio`, `retainRatio`,
+  `minTailTokens`, `reserveOutputTokens`, `protectHeadNodes`, `maxAutoTrimRetries`, `allowTailTrim`, `autoTrim`,
+  `emergencyTrim`, `preferInPlacePrune`, `pruneThresholdChars`, `pruneHeadChars`, `pruneTailChars`) are now marked
+  `.volatile()`, which is the only thing that puts a field on a card. Until now they were unreachable from the UI while
+  the one card that existed showed the tuner's five fields under a row named `/trim` — so the visible settings belonged
+  to a different component than the row's name suggested.
+
+### Changed
+
+- Each card's controls are namespaced by row (`plugin-config-trim-…`, `plugin-config-tune-…`), and each card opens with
+  a line naming the component it configures. That is what distinguishes the two cards in the UI, because the ROW
+  HEADINGS cannot be distinguished: a row's heading comes from its module, a bundle mounts one patch and has one module
+  name, and dsh resolves a row's `meta` by module name too — so neither a second patch file nor a per-row `meta.title`
+  separates them. (Both were tried and measured; `cordis.tune.yml` is kept as the row's documentation, declaring no
+  row, because a second patch file is never read.)
+- The switches carry an `id` on their wrapper. The shell's `Switch` takes none, so a boolean control previously had
+  nothing in the DOM to point at.
+
+
 ## [0.6.1] - 2026-09-29
 
 ### Added
@@ -786,7 +814,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/snailium/dsh-command-context-trim/compare/v0.5.0...v0.5.1

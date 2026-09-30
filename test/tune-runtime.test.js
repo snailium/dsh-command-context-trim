@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { DEFAULTS } from '../lib/config.js';
 import { readFileSync } from 'node:fs';
 import { findCompactionRow, mergeTunedConfig, registerAutoTune, registerPresetSync, tuneCompactionAtRuntime } from '../lib/tune-runtime.js';
 import { resolveConfig } from '../lib/config.js';
@@ -177,8 +178,13 @@ test('auto tune writes immediately, without waiting for an idle moment', async (
 });
 
 test('the shipped patch documents the switch as off', () => {
-	const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
-	assert.match(patch, /autoTuneCompaction: false/u);
+	// The tuner's knobs are documented in the row's own patch file (as comments: a value written in a bundle patch is
+	// an explicit override, so pinning the default there would undo a pre-split profile's own value). The point of the
+	// assertion is that a fresh install does NOT switch the automatic tuning on by default.
+	const tune = readFileSync(new URL('../cordis.tune.yml', import.meta.url), 'utf8');
+	assert.match(tune, /#\s*autoTuneCompaction:\s+false/u, 'the default must be documented as off');
+	assert.doesNotMatch(tune, /^\s*autoTuneCompaction:/mu, 'and must not be set to a value, only documented');
+	assert.equal(DEFAULTS.autoTuneCompaction, false, 'the plugin default is off');
 });
 
 test('a retune is reported on stderr, and a no-op check is not', async () => {

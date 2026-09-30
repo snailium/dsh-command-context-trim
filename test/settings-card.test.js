@@ -9,6 +9,8 @@ const ROOT = new URL('..', import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8'));
 const clientSource = readFileSync(new URL('lib/client.js', ROOT), 'utf8');
 const patchSource = readFileSync(new URL('cordis.patch.yml', ROOT), 'utf8');
+// The tuning half has its own patch file on purpose: a row's heading comes from its module URL, so two rows on one
+// file are both called "dsh-command-context-trim" in the UI and a reader cannot tell the cards apart.
 
 /** Field names the loader schema marks `.volatile()` — exactly what the card shows. */
 function volatileFields(schema) {
@@ -30,11 +32,28 @@ test('exactly the two tuning fields are volatile, so the card shows exactly thos
 		assert.deepEqual(volatileFields(Config), [], 'a harness without .volatile() must not break the import');
 		return;
 	}
+	// The trims' own thirteen plus the tuner's five, sorted as the helper returns them. They became volatile in 0.6.2
+	// so that each row's card can carry its own half: a 0.1.7 form only holds volatile fields, so a field that is not
+	// volatile is on no card at all — which is why the trims had no settings of their own until now, and why the one
+	// card that existed showed the tuner's fields under a row named `/trim`.
 	assert.deepEqual(volatileFields(Config), [
+		'allowTailTrim',
+		'autoTrim',
 		'autoTuneCompaction',
 		'compactionRoute',
 		'compactionTargetRatio',
+		'emergencyTrim',
+		'maxAutoTrimRetries',
+		'minTailTokens',
+		'preferInPlacePrune',
+		'protectHeadNodes',
+		'pruneHeadChars',
+		'pruneTailChars',
+		'pruneThresholdChars',
 		'prunerThresholdChars',
+		'reserveOutputTokens',
+		'retainRatio',
+		'targetRatio',
 		'tuneStockDisabledRoutes'
 	]);
 	const json = Config.toJSON();
@@ -74,8 +93,24 @@ test('the client half is declared and points at a file that ships', () => {
 test('the client entry id matches the loader row id, which is what the page keys on', () => {
 	const entryId = /const ENTRY_ID = '([^']+)'/u.exec(clientSource)?.[1];
 	assert.equal(entryId, 'context-trim');
-	assert.match(patchSource, new RegExp(`- id: ${entryId}$`, 'mu'), 'the bundle patch must declare that row id');
-	assert.match(clientSource, /whileServed\(\[ENTRY_ID\]/u, 'the card must be gated on the served namespace');
+	assert.match(patchSource, new RegExp(`- id: ${entryId}$`, 'mu'), 'cordis.patch.yml must declare the trim row');
+	// Both rows DO share a module, and that is a property of dsh rather than a choice: a bundle mounts one patch and
+	// has one module name, and dsh resolves a row's `meta` by module name too, so neither a per-row meta nor a second
+	// patch file can separate the headings. The cards therefore name their own component — pinned below.
+	// Both rows live in the one patch, and read the module off each row's own `name:` line.
+	const rowModules = [...patchSource.matchAll(/^\s+- id: (context-trim[a-z-]*)\n\s+name: (\S+)/gmu)].map((m) => [m[1], m[2]]);
+	assert.equal(rowModules.length, 2, 'both rows are declared, each with a name');
+	assert.equal(rowModules[0][1], rowModules[1][1], `both rows are on ${rowModules[0][1]}; the heading cannot distinguish them`);
+	assert.match(clientSource, /cardTrimIntro/u, 'so the trim card names itself');
+	assert.match(clientSource, /cardTuneIntro/u, 'and so does the tune card');
+	assert.match(patchSource, /- id: context-trim-tuning$/mu, 'the tuning row must be declared in the one patch a bundle mounts');
+	assert.match(patchSource, /role: tuning/u, 'the tuning row must declare the role its module dispatches on');
+	// The row must point at a DISTINCT MODULE, because a row's heading comes from its module and two rows on one entry
+	// are both called "dsh-command-context-trim". A row's `name` is a JS module specifier, not a patch file.
+	// Both files must ship, or the bundle declares a row whose module is not there.
+	assert.ok(manifest.files.includes('cordis.tune.yml'), 'cordis.tune.yml must be in `files`');
+	assert.ok(manifest.exports['./cordis.tune.yml'] === './cordis.tune.yml', 'and exported');
+	assert.match(clientSource, /whileServed\(\[row\.rowId\]/u, 'each card must be gated on its own row namespace');
 });
 
 test('the card follows the 0.1.7 contract: summary one-liner, shared body, no own frame', () => {
@@ -92,8 +127,8 @@ test('the card follows the 0.1.7 contract: summary one-liner, shared body, no ow
 	// official slot: a card parked there still renders, but mislabelled under "Official" and, measured on 0.2.0,
 	// refused on save. The key fails silently if wrong, so all three pieces are asserted.
 	assert.match(clientSource, /name: 'plugins\.row\.config'/u);
-	assert.match(clientSource, /key: ROW_CONFIG_KEY/u);
-	assert.match(clientSource, /\$\{PACKAGE\}#\$\{ENTRY_ID\}/u);
+	assert.match(clientSource, /key: rowConfigKey\(row\.rowId\)/u);
+	assert.match(clientSource, /const rowConfigKey = \(rowId\) =>/u);
 	// The card declares each field with the type it must be written as, and parses on save: a boolean staged as the
 	// string "true" is refused in band on 0.2.0, which is why the primitives' text-staging model is not used here.
 	assert.match(clientSource, /key: 'autoTuneCompaction', kind: 'boolean'/u);
