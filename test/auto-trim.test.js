@@ -294,10 +294,65 @@ test('it defers when the target route declares no window', async () => {
 	assert.equal(session.seq, seq);
 });
 
-test('autoTrim: false registers no overflow listener at all', () => {
-	const { entries } = captureContext({ autoTrim: false });
-	assert.equal(entries('agent/request-error').length, 0);
+test('autoTrim: false keeps the listener resident but delegates to next() on overflow', async () => {
+	const { entries, listener } = captureContext({ autoTrim: false });
+	assert.equal(entries('agent/request-error').length, 1, 'listener stays resident to support dynamic GUI toggles');
+	const session = buildSession();
+	const agent = stubAgent(session);
+	const seq = session.seq;
+	let nexted = false;
+	const outcome = await listener('agent/request-error').listener(
+		{ agent, failure: overflow, signal: new AbortController().signal },
+		() => {
+			nexted = true;
+			return 'from-downstream';
+		}
+	);
+	assert.equal(nexted, true);
+	assert.equal(outcome, 'from-downstream');
+	assert.equal(session.seq, seq, 'session was not touched');
 });
+
+test('autoTrim reacts dynamically to volatile runtime toggle', async () => {
+	let autoTrimEnabled = false;
+	const volatileHandle = { get: () => autoTrimEnabled };
+	const listeners = new Map();
+	const ctx = {
+		logger: { info() {}, warn() {} },
+		on(name, listener, options) {
+			const entries = listeners.get(name) ?? [];
+			entries.push({ listener, options });
+			listeners.set(name, entries);
+			return () => undefined;
+		},
+		tokenMeter: stubMeter(),
+		llm: { resolveModelInfo: async () => ({ context: { contextWindow: 16000 } }) },
+		get: () => undefined
+	};
+	registerAutoTrim(ctx, { autoTrim: volatileHandle });
+	const session = buildSession();
+	const agent = stubAgent(session);
+
+	// Initially false -> delegates to next()
+	let nexted = false;
+	await listeners.get('agent/request-error')[0].listener(
+		{ agent, failure: overflow, signal: new AbortController().signal },
+		() => {
+			nexted = true;
+			return undefined;
+		}
+	);
+	assert.equal(nexted, true);
+
+	// Dynamically toggled to true -> executes auto-trim
+	autoTrimEnabled = true;
+	const result = await listeners.get('agent/request-error')[0].listener(
+		{ agent, failure: overflow, signal: new AbortController().signal },
+		() => undefined
+	);
+	assert.deepEqual(result, { kind: 'retry' });
+});
+
 
 test('it never touches ordinary compaction: no pre-step/pressure hook is registered', () => {
 	const { entries } = captureContext({});
