@@ -299,7 +299,7 @@ test('an inventory that is not ready yet is a deferral, not a reported failure',
 	assert.equal(deferred.result.kind, 'deferred', deferred.result.text);
 	assert.match(deferred.result.text, /no routable provider\/model pairs are visible yet/);
 	assert.match(deferred.result.text, /next trigger will retry/);
-	assert.match(deferred.result.text, /\/trim tune check reports it on demand/);
+	assert.match(deferred.result.text, /\/context-tune tune check reports it on demand/);
 
 	// The automatic path must stay silent about it: no stderr, no failure memory.
 	const written = [];
@@ -488,3 +488,61 @@ test('a throw from the preset registry is reported, not swallowed', async () => 
 		process.off('unhandledRejection', onUnhandled);
 	}
 });
+
+test('preset sync is isolated per context instance', async () => {
+	const captured = [];
+	const original = process.stderr.write.bind(process.stderr);
+	process.stderr.write = (chunk) => {
+		captured.push(String(chunk));
+		return true;
+	};
+	try {
+		const makeCtx = () => {
+			const listeners = new Map();
+			const ctx = stubContext({ plane: 'preset' });
+			ctx.on = (event, handler) => {
+				listeners.set(event, handler);
+				return () => listeners.delete(event);
+			};
+			ctx.get = ((base) => (name) =>
+				name === 'agentPresets'
+					? {
+							composedPreset: () => 'standard',
+							remoteExportList: async () => ({ presets: [{ id: 'standard', name: 'Standard', order: 1 }] }),
+							readDocument: async () => {
+								throw new Error('sync probe');
+							}
+						}
+					: base(name))(ctx.get);
+			return { ctx, listeners };
+		};
+
+		// First context: first trigger attempts sync and fails with "sync probe".
+		const { ctx: ctx1, listeners: listeners1 } = makeCtx();
+		const dispose1 = registerPresetSync(ctx1, CONFIG());
+		await listeners1.get('agent/created')({ agent });
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		dispose1();
+		assert.equal(captured.filter((s) => s.includes('sync probe')).length, 1);
+
+		// First context: second trigger should be skipped because preset "standard" is already recorded on ctx1.
+		captured.length = 0;
+		const dispose1b = registerPresetSync(ctx1, CONFIG());
+		await listeners1.get('agent/created')({ agent });
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		dispose1b();
+		assert.equal(captured.filter((s) => s.includes('sync probe')).length, 0, 'second trigger on same ctx was skipped');
+
+		// Second context: must NOT inherit ctx1 synced state, so it attempts sync and fires "sync probe" again.
+		captured.length = 0;
+		const { ctx: ctx2, listeners: listeners2 } = makeCtx();
+		const dispose2 = registerPresetSync(ctx2, CONFIG());
+		await listeners2.get('agent/created')({ agent });
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		dispose2();
+		assert.equal(captured.filter((s) => s.includes('sync probe')).length, 1, 'distinct ctx attempts sync independently');
+	} finally {
+		process.stderr.write = original;
+	}
+});
+
