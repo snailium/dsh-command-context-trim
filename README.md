@@ -72,7 +72,7 @@ turn is wrong. So:
 **You do not have to remember this.** The planner keeps such a route at its stock setting by default: it writes the
 route a policy with dsh's stock 65536 headroom, so the pressure budget stays negative and the trigger stays disabled,
 and it says so in its output. Enabling one there is an explicit choice — `--include-stock-disabled-routes` for
-`scripts/make-preset-patch.mjs`, or `tuneStockDisabledRoutes: true` for `/trim tune` — and even then the measurement
+`scripts/make-preset-patch.mjs`, or `tuneStockDisabledRoutes: true` for `/context-tune tune` — and even then the measurement
 above is printed next to it.
 
 Two honest limits. Where the route's own reserve is larger than `(1 − r) × W`, the ratio is *unreachable by
@@ -93,7 +93,7 @@ The sharper edge is permanence. `agentPresets.resolve(id)` has no fallback — a
 session bound to it can be neither resumed nor forked, and the lock means it cannot be re-pointed at another one.
 A dsh upgrade overwrites the **shipped** presets, and a generated preset can be deleted by hand; the id you generate
 is therefore a durable interface. Keep it stable across plugin upgrades, keep at least one copy, and use
-`/trim preset default` so that *new* sessions pick it up — existing ones will not follow.
+`/context-tune preset default` so that *new* sessions pick it up — existing ones will not follow.
 
 On headless/tui the profile-plane path (`autoTuneCompaction`, `prunerThresholdChars`) has none of these problems,
 because there `dsh-base` inserts both rows into the profile and a patch layer retunes them on every boot. Prefer
@@ -110,8 +110,8 @@ lock.
 |---|---|---|
 | retune thresholds or the pruner (headless, tui) | `autoTuneCompaction`, the settings card, or a patch layer | applied at boot or live; nothing persists that can break |
 | pick the summarizer (headless, tui) | the profile plane (`summarizationProvider` / `summarizationModel`, or `modelPolicies` per route) | ordinary config keys — no preset needed |
-| do either one in **web** | `/trim preset` | the web host plane disables both rows, so nothing else can reach them |
-| a different config per session or task | `/trim preset` | presets are per session; the profile is per profile |
+| do either one in **web** | `/context-tune preset` | the web host plane disables both rows, so nothing else can reach them |
+| a different config per session or task | `/context-tune preset` | presets are per session; the profile is per profile |
 | change a session that already started | start a **new** session | locked at the first turn, and a fork inherits the lock |
 
 ## Install
@@ -317,7 +317,7 @@ node scripts/check-session-marker.mjs --prefix <dir with node_modules/@deepseek-
 One host half loads on every supported harness line; two features are scoped to the line that introduced the plane they
 need. Verified state, by feature:
 
-| Harness | `/trim` | automatic trim | emergency trim | `/trim preset` | settings card |
+| Harness | `/trim` | automatic trim | emergency trim | `/context-tune preset` | settings card |
 |---|---|---|---|---|---|
 | 0.1.2-rc.1 (the pinned devDependency floor) | ✅ | ✅ | ✅ | ❌ clear error | ❌ absent |
 | 0.1.5-rc.3 | ✅ | ✅ | ✅ | ❌ clear error | ❌ absent |
@@ -329,28 +329,34 @@ What the ❌ entries mean in practice:
 - **Where auto-tuning actually applies (measured, not assumed).** In a **web** profile the host plane does not receive
 the session agents' lifecycle events — the agents are created inside each session's preset realm — so neither the
 automatic retune nor the preset-definition sync fires there: a web profile logs the boot-time refusal and then
-nothing, however many sessions run. That is why web is a **manual** workflow: `/trim preset inplace` writes the
-tuning, `/trim preset check` tells you when a newly added route made it stale, and a fork (or a new session) applies
+nothing, however many sessions run. That is why web is a **manual** workflow: `/context-tune preset inplace` writes the
+tuning, `/context-tune preset check` tells you when a newly added route made it stale, and a fork (or a new session) applies
 it. The automatic paths remain meaningful for profiles whose host plane does own the agents (headless, TUI).
 
 **Auto-sync keeps the preset definition current, and `check` says what is missing.** With `autoTuneCompaction` on,
 a web profile cannot retune a running session (compaction lives inside its preset realm), so the plugin does the one
 thing that plane allows: on the first new session it keeps the preset *definition* in sync — one write per preset id
 per process, never blocking a turn — which is what makes the next fork, new session, or restart already correct when
-a model is added to the profile. `/trim preset check` reports the gap directly: how many configured routes the
+a model is added to the profile. `/context-tune preset check` reports the gap directly: how many configured routes the
 current preset covers, and an explicit warning for any **uncovered route at or below 64K**, where inheriting the
 tuned top level would *enable* the pressure trigger — the configuration measured slower (15 -> 24 compactions).
 
-**`/trim rescue <id>` brings a session back whose preset id disappeared.** `resolve()` has no fallback, so a session
+**To undo the tuning, run `/context-tune reset`.** It removes the marker blocks this plugin wrote into the profile
+patch, so each preset falls back to its own definition. With no argument it reports and removes them all; with a preset
+id it removes only that one; add `check` to report without writing. It recognises its own rows by the marker rather
+than by matching a description, so another tool's blocks are listed and left alone. The preset lock still applies: like
+every other change here, a removal lands for NEW sessions, or for a session after a restart.
+
+**`/context-tune rescue <id>` brings a session back whose preset id disappeared.** `resolve()` has no fallback, so a session
 bound to a preset that an upgrade (or a manual cleanup) removed can be neither resumed nor forked — and the lock plus
 `assertPresetUnchanged` mean it can never be re-pointed at a different id. The repair is to make the id resolvable
-again, which is also the moment to decide what it *is*: `/trim rescue <id>` clones a donor preset (`--from <preset>`,
-default `standard`) and, unless `--untuned` is given, applies the same tuning `/trim preset inplace` would
+again, which is also the moment to decide what it *is*: `/context-tune rescue <id>` clones a donor preset (`--from <preset>`,
+default `standard`) and, unless `--untuned` is given, applies the same tuning `/context-tune preset inplace` would
 (compaction trigger plus the derived pruner threshold). The report says out loud what the clone cannot restore: the
 session's history does not depend on the plugin list, but its future turns do, so a preset that mounted extra tools
 will not get them back from a donor. It refuses an id that still exists.
 
-**`/trim preset inplace` removes the picking step.** Instead of declaring `<base>-tuned` it writes an override row
+**`/context-tune preset inplace` removes the picking step.** Instead of declaring `<base>-tuned` it writes an override row
 for the base preset's own id (`- id: preset-standard` + a complete `config:`), which is exactly how the Web editor
 persists a preset edit. New sessions keep using `standard` and pick the tuning up with no picker interaction, and the
 same row doubles as the repair for a session whose custom preset disappeared in an upgrade — recreating the id is
@@ -370,13 +376,13 @@ to the generation it composed, and that binding keeps the old realm alive, so th
 for the next restart). The fork has a new session id and is locked like any started session (it inherits the parent's
 `turn/start` events), which is harmless because it already runs the tuned values.
 
-**`/trim preset` writes the pruner too.** It splices both rows of the preset it clones: `compaction-basic`'s trigger
+**`/context-tune preset` writes the pruner too.** It splices both rows of the preset it clones: `compaction-basic`'s trigger
 and `tool-result-pruner`'s `thresholdChars`, the latter from the same derivation auto-tune uses
 (`max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins). That matters in a web
 profile, where the host-plane rows are disabled and the preset is the only place the pruner can be configured — a
 generated preset that left `thresholdChars` at 8192 would keep clipping every whole-file read.
 
-**`/trim preset`** needs the preset plane (`agentPresets`), the config-editor service and `profileContext.patchPath`.
+**`/context-tune preset`** needs the preset plane (`agentPresets`), the config-editor service and `profileContext.patchPath`.
   Every package behind those — `dsh-agent-preset-registry`, `dsh-config-editor` — first appears at **0.1.7-alpha.1**, so
   an older harness gets "this profile composes no agent-preset registry" instead of a half-working command. Nothing else
   depends on them: the command lives in its own module, imported only when it runs.
@@ -423,7 +429,7 @@ exists only in `Custom`:
 | `Custom` | the character count typed into the box |
 
 `Auto tune compaction at runtime` carries, in bold, the one caveat that matters: **headless profile only — a web
-profile must use the `/trim preset` command** (session agents live inside preset realms there and their lifecycle
+profile must use the `/context-tune preset` command** (session agents live inside preset realms there and their lifecycle
 events never reach the host plane). The switches are the shell's own `Switch` primitive; the mode select is a plain
 `<select>`, because the primitives ship no select.
 
@@ -444,7 +450,7 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 | `maxAutoTrimRetries` | `3` | Automatic trims allowed per overflow episode before compaction takes over |
 | `autoTrimShrink` | `0.5` | After a repeat overflow, retarget to this fraction of the rejected request (geometric descent when the declared window is wrong) |
 | `preferInPlacePrune` | `true` | Slim oversized tool results in place before planning any span; uses the official pruner when reachable |
-| `compactionTargetRatio` | `0.8` | Trigger fraction written into a preset generated by `/trim preset` (shapes the preset only, never this plugin's trimming) |
+| `compactionTargetRatio` | `0.8` | Trigger fraction written into a preset generated by `/context-tune preset` (shapes the preset only, never this plugin's trimming) |
 | `compactionRoute` | unset | Optional `{provider, model}` pair for the generated preset's summarization call |
 | `tuneStockDisabledRoutes` | `false` | When `false` (the default), a route whose *stock* profile has no pressure trigger is left that way — enabling a trigger there only adds compaction events (see *When it does not pay*), so the model-free `/trim` and dsh's overflow path keep the wall. Set it to `true` to tune those routes anyway |
 | `prunerThresholdChars` | `auto` (`DSH_TRIM_PRUNER`) | The tool-result pruner's clip threshold. `auto` derives it per route as `max(8192, min(32768, 2 × (contextWindow − maxTokens)))`, smallest routed window wins, so one whole-file read is not clipped away on a small window (dsh's stock value is `8192`). An integer overrides it; `0` opts out and leaves the pruner alone. Same plane as the compaction row, so the same reachability rule applies — a web profile keeps the pruner inside each session's preset and the plugin reports that instead of writing. On a **small** window this is the lever that matters (see *When it does not pay*); with a **pressure trigger enabled** it makes prompts bigger, so think twice there |
@@ -457,8 +463,8 @@ What the plugin touches, stated so a reviewer does not have to infer it:
 
 | Capability | State | Detail |
 |---|---|---|
-| Files | **yes, deliberately** | `/trim preset` writes **one** file: the profile patch (`$DSH_HOME/profiles/<profile>/cordis.patch.yml`). It writes atomically (temp file + rename), keeps one rolling backup (`…bak-trim-preset`), and confines its own content to a marker-delimited block it can replace. `lib/preset-tune.js` holds the runtime's only `node:fs` import. Trimming itself touches no file: it edits the in-memory session surface through the documented `surfaceOp` mechanism. |
-| Network | no | No socket, no HTTP client, no `fetch`. `/trim preset` asks the host's `llm` service for the configured routes (`listModels` / `resolveModelInfo`), which resolves from local metadata; the plugin itself never opens a connection. |
+| Files | **yes, deliberately** | `/context-tune preset` writes **one** file: the profile patch (`$DSH_HOME/profiles/<profile>/cordis.patch.yml`). It writes atomically (temp file + rename), keeps one rolling backup (`…bak-trim-preset`), and confines its own content to a marker-delimited block it can replace. `lib/preset-tune.js` holds the runtime's only `node:fs` import. Trimming itself touches no file: it edits the in-memory session surface through the documented `surfaceOp` mechanism. |
+| Network | no | No socket, no HTTP client, no `fetch`. `/context-tune preset` asks the host's `llm` service for the configured routes (`listModels` / `resolveModelInfo`), which resolves from local metadata; the plugin itself never opens a connection. |
 | Command | no | No child process, no shell, no `exec`/`spawn`. |
 | Credentials | no | No key, token or credential is read, logged or forwarded. Provider credentials stay with the `llm-pi-ai` row. The runtime reads exactly **one** environment variable, `DSH_TRIM_AUTO_TUNE`, as an opt-in boolean feature flag. |
 | Protected DSH behaviour | no | It never disables, replaces or shadows an official component. A generated preset is a **clone** of the preset in use with only the compaction group's config replaced — a new preset id, the original left untouched. |
@@ -470,7 +476,7 @@ Failure bounds:
 - trimming is model-free and additive: it shadows context with one marker message and never summarizes;
 - when nothing can be freed it declines and compaction proceeds — it never forces a partial trim;
 - the automatic path is bounded: `maxAutoTrimRetries` attempts, one emergency trim per overflow episode, every decision logged;
-- a `/trim preset` write that fails leaves the previous file intact (temp + rename) and reports the error instead of half-writing;
+- a `/context-tune preset` write that fails leaves the previous file intact (temp + rename) and reports the error instead of half-writing;
 - the plugin never throws out of the overflow listener: a failure to trim is reported and the turn continues on the existing path.
 
 ## Limits
@@ -485,34 +491,35 @@ Failure bounds:
 - **Heuristic pricing.** Budgets use the token meter's own estimate — the same numbers `/compact` and the GUI context bar
   use. Provider-reported usage drifts slightly from it.
 
-## Tuning compaction's threshold (`/trim preset`)
+## Tuning compaction's threshold (`/context-tune preset`)
 
 DSH decides when to compact from `thresholdTokens = min(contextWindow × thresholdRatio, messageBudget − headroomTokens)`
 with `headroomTokens` defaulting to **65536**. That default, not the ratio, decides the trigger on any window below
 ~370k: a 131072-token route compacts at **37.5 %**, not 80 %. The ratio cannot move it alone, and compaction's policy is
 read at composition time inside a preset isolate realm, so a plugin cannot retune it at runtime.
 
-`/trim preset` therefore writes a **preset**:
+`/context-tune preset` therefore writes a **preset**:
 
 ```
-/trim preset              # generate + land a tuned preset from the configured routes
-/trim preset inplace      # override the base preset's own id instead of adding an id (see below)
-/trim preset check        # print the generated row + route coverage, write nothing
-/trim preset list         # the routes a generated preset would cover, and the trigger each gets
-/trim preset default      # also make the generated preset the default for NEW sessions
-/trim preset p:m          # ... using p:m as the summarization route for this run
-/trim rescue <id>         # recreate a preset id that went missing (--from <donor>, --untuned)
+/context-tune preset          # generate + land a tuned preset from the configured routes
+/context-tune preset inplace  # override the base preset's own id instead of adding an id (see below)
+/context-tune preset check    # print the generated row + route coverage, write nothing
+/context-tune preset list     # the routes a generated preset would cover, and the trigger each gets
+/context-tune preset default  # also make the generated preset the default for NEW sessions
+/context-tune preset p:m      # ... using p:m as the summarization route for this run
+/context-tune rescue <id>     # recreate a preset id that went missing (--from <donor>, --untuned)
+/context-tune reset [check] [preset-id]  # remove the tuning rows this plugin wrote
 ```
 
-`/trim preset check` is the **staleness signal**: it counts the routes the current preset covers and warns about an
+`/context-tune preset check` is the **staleness signal**: it counts the routes the current preset covers and warns about an
 **uncovered route at or below a 64K message budget**, the one case where inheriting the tuned top level enables the
 pressure trigger instead of leaving it at stock. Add a model to the profile, run `check`, and re-run
-`/trim preset inplace` when it reports a gap:
+`/context-tune preset inplace` when it reports a gap:
 
 ```
 coverage: 4 route(s) configured, 3 covered by this preset, 1 not covered.
 ⚠ uncovered SMALL route bonsai-8gb//models/mtp-lean.gguf (40960 − 8192 ≤ 65536): without a policy it inherits the
-  tuned top level, which enables the pressure trigger on a route where that measured slower. Re-run /trim preset inplace…
+  tuned top level, which enables the pressure trigger on a route where that measured slower. Re-run /context-tune preset inplace…
 ```
 
 It clones the preset the session is using (via `agentPresets.readDocument`, so the clone always matches the installed
@@ -535,7 +542,7 @@ The generated `compaction-basic` config carries a **per-route `modelPolicies` en
 reserve makes the target unreachable are reported as capped rather than silently written. Then pick the new preset on the **New Session** screen — if it is not listed yet, restart dsh (a `patchReload: startup`
 profile ignores patch edits until boot). A session's preset is locked once its first turn starts (`agent-preset/locked`
 from the registry), because switching one recomposes the preset's whole isolate realm: an already-running session cannot
-switch, which is why `/trim preset default` exists — it sets the default for every new session instead. That write is
+switch, which is why `/context-tune preset default` exists — it sets the default for every new session instead. That write is
 guarded: the command waits (bounded, ~2.5 s) for the generated preset to appear as a **healthy** registration before
 pointing the default at it, because the new-session path resolves the default and an unknown id would fail there.
 
@@ -544,14 +551,14 @@ pointing the default at it, because the new-session path resolves the default an
 The route field is free text rather than a dropdown: dsh 0.1.7's shared settings form exposes only
 `settingsNumberField` and `settingsTextField` (see `@deepseek-ai/dsh-client-ui-primitives`' typed surface), and drawing a
 custom control would step outside the staged-form contract — the frame, the override/reset semantics and the fenced write
-all come from the shared form. `/trim preset list` is the inventory view instead: it prints every routable provider/model
+all come from the shared form. `/context-tune preset list` is the inventory view instead: it prints every routable provider/model
 with its window, output reserve and the trigger it would get.
 
 Both keys are also editable in the GUI: **Plugins → Context trim** shows a card with the compaction trigger and the
 summarization route. Only fields marked `.volatile()` appear there, and a volatile field arrives at the plugin as a live
 handle, so every read goes through `readConfig` and an edit takes effect on the next invocation without a reload.
 
-## Retuning the live process (`/trim tune`)
+## Retuning the live process (`/context-tune tune`)
 
 Where compaction is composed on the **profile plane** — anything built on `dsh-base`, i.e. headless and
 tui — its threshold is an ordinary row's config, and cordis applies a config change by restarting the
@@ -559,8 +566,8 @@ fiber (`Fiber.update()` resolves the new config and calls `restart()`, i.e. disp
 there is no "hot-reloadable only" restriction). So the tuning can be written at runtime:
 
 ```
-/trim tune            # retune this process's compaction row from the routes it can see, then report
-/trim tune check      # print the diff, write nothing
+/context-tune tune            # retune this process's compaction row from the routes it can see, then report
+/context-tune tune check      # print the diff, write nothing
 ```
 
 The routes come from the adapter (`ctx.llm.resolveModelInfo`) — the same source compaction itself uses —
@@ -568,7 +575,7 @@ so a profile that *claims* 128k while the backend really serves 40k is corrected
 write is skipped when nothing changes, and it is refused with an explanation where it cannot work: in a
 **web** profile compaction lives inside each session's agent-preset isolate realm (`ctx.get('compaction')`
 is empty from the host plane), and a session's preset cannot change once it has started — tune the preset
-there instead (see `/trim preset`).
+there instead (see `/context-tune preset`).
 
 `autoTuneCompaction: true` (off by default) does that automatically, and the trigger set was reviewed
 rather than accumulated: the agent's creation (`agent/created`, the earliest point and the only one a
@@ -584,7 +591,7 @@ can be compacting — and idempotent, so an unchanged route writes nothing and a
 no restarts. A write does restart the compaction row, so a *later* write can cancel a compaction that is in
 flight; that is the one trade-off, and the log says so.
 
-**The pruner is the other half of a small window.** `/trim tune` also writes `tool-result-pruner` when
+**The pruner is the other half of a small window.** `/context-tune tune` also writes `tool-result-pruner` when
 `prunerThresholdChars` is set (`--pruner-threshold-chars` for the generator), on the same profile plane and
 with the same guard: where the pruner lives inside a session preset — a web profile — the plugin says so and
 writes nothing. Raising it means a `read` of a whole source file survives instead of being clipped to a head
@@ -707,9 +714,9 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | Same instance: the Plugins page lists the card under *Official* with its summary line, both fields render, a staged edit saves, and the value lands as a `context-trim` row in the profile patch | ✅ verified |
 | Headless client-bundle test (fake `window.__ModuleLoader__`): summary one-liner, two-field form body, older-host no-op | ✅ 3 tests |
 | **End-to-end in the real `dsh-container` image (0.1.5-rc.2, isolated home, mock backend)**: span path (33,373 → 18,431 tokens, `compaction/start` = 0) and in-place slim path (23,429 → 19,995 tokens, no span elided, pruner delegated to the official service) | ✅ both verified |
-| `/trim preset inplace` in an isolated 0.1.7 instance: one bare override row for `preset-standard` (no `insert:`, no new id), `config.id: standard`, registry accepts it and the picker keeps the same preset | ✅ verified |
+| `/context-tune preset inplace` in an isolated 0.1.7 instance: one bare override row for `preset-standard` (no `insert:`, no new id), `config.id: standard`, registry accepts it and the picker keeps the same preset | ✅ verified |
 | Same instance: the derived pruner threshold lands in that row (`thresholdChars: 32768`, stock `8192` gone) and a re-run is idempotent, with no stacked name suffix | ✅ verified |
-| `/trim rescue <id>` in an isolated instance: a bare override row for the **missing** id whose `config.id` matches it, tuned by default, refusing an id that still exists | ✅ verified |
+| `/context-tune rescue <id>` in an isolated instance: a bare override row for the **missing** id whose `config.id` matches it, tuned by default, refusing an id that still exists | ✅ verified |
 | A live web instance logs the boot-time `compaction is not reachable from this plane` and then nothing per session — session agents are created inside preset realms, so their lifecycle events never reach the host plane | ✅ measured (see *Which route to use*) |
 | **Bonsai 2 headless re-run with `DSH_TRIM_AUTO_TUNE=1`** (`session-2577e98b…`, 0.102): the tuned record carries `thresholdChars: 32768` and `compaction/prune` dropped **17 → 2** against the earlier 0.3.2 run | ✅ before/after verified |
 | CI workflow (Node 22 / 24) | ✅ green |
@@ -757,7 +764,7 @@ more expensive than the provisional estimate. Leading nodes are protected by `pr
 (`1`), the newest human prompt is never elided, and tool-call/result pairs are only cut where the
 pairing stays balanced (`allowTailTrim: true`).
 
-### 3. The compaction trigger (what auto-tune and `/trim preset` write)
+### 3. The compaction trigger (what auto-tune and `/context-tune preset` write)
 
 Mirrors `@deepseek-ai/dsh-compaction-basic`'s `resolveCompactSpec` as read from dsh 0.1.7-rc.2:
 

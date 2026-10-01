@@ -19,11 +19,14 @@ test('README.zh.md stays in step with README.md', async () => {
 
 	// Language-neutral strings: commands, flags, keys, env vars. If one side gains a command, both must list it.
 	const needles = [
-		'/trim preset inplace',
-		'/trim preset check',
-		'/trim preset list',
-		'/trim preset default',
-		'/trim rescue',
+		// 0.6.3 moved the tuning surface to /context-tune, so the needles carry the CURRENT spellings. The point of
+		// this list is that both READMEs mention the same commands, not that they mention a particular one.
+		'/context-tune preset inplace',
+		'/context-tune preset check',
+		'/context-tune preset list',
+		'/context-tune preset default',
+		'/context-tune reset',
+		'/context-tune rescue',
 		'--from',
 		'--untuned',
 		'DSH_TRIM_AUTO_TUNE',
