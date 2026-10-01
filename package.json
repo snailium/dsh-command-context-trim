@@ -10,16 +10,20 @@
 		".": {
 			"default": "./lib/index.js"
 		},
+		"./tune": "./lib/tune.js",
 		"./client": {
 			"default": "./lib/client.js"
 		},
 		"./cordis.patch.yml": "./cordis.patch.yml",
 		"./cordis.tune.yml": "./cordis.tune.yml",
+		"./locale/*.json": "./locale/*.json",
+		"./tune/locale/*.json": "./locale/tune/*.json",
 		"./package.json": "./package.json"
 	},
 	"files": [
 		"lib",
 		"docs",
+		"locale",
 		"cordis.patch.yml",
 		"cordis.tune.yml",
 		"README.md",
@@ -31,6 +35,7 @@
 		"node": "^22.19 || >=24"
 	},
 	"scripts": {
+		"build:client": "node scripts/build-client.js",
 		"test": "node --test",
 		"link:harness": "bash scripts/dev-link-harness.sh",
 		"prepublishOnly": "npm test",

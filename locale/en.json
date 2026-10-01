@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Context trim",
+    "description": "Trim the oldest, least valuable span of context when a request hits the model window — without any model call."
+  }
+}

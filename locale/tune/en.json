@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Context tuning",
+    "description": "Decide when compaction fires and how hard the tool-result pruner clips: raise the trigger, derive the pruner threshold from each route, and write the result into a preset (/context-tune)."
+  }
+}

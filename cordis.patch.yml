@@ -75,7 +75,7 @@
 # switch and its own settings, which is what the split was for.
 - insert:
     - id: context-tuning
-      name: dsh-command-context-trim
+      name: dsh-command-context-trim/tune
       config:
         role: tuning
         # compactionTargetRatio: 0.8      # fraction of each routed window at which compaction fires

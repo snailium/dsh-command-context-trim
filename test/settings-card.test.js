@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import z from '@deepseek-ai/schemastery';
 import { Config } from '../lib/index.js';
 import { readConfig, resolveConfig } from '../lib/config.js';
@@ -95,22 +95,26 @@ test('the client entry id matches the loader row id, which is what the page keys
 	const entryId = /const ENTRY_ID = '([^']+)'/u.exec(clientSource)?.[1];
 	assert.equal(entryId, 'context-trim');
 	assert.match(patchSource, new RegExp(`- id: ${entryId}$`, 'mu'), 'cordis.patch.yml must declare the trim row');
-	// Both rows DO share a module, and that is a property of dsh rather than a choice: a bundle mounts one patch and
-	// has one module name, and dsh resolves a row's `meta` by module name too, so neither a per-row meta nor a second
-	// patch file can separate the headings. The cards therefore name their own component — pinned below.
-	// Both rows live in the one patch, and read the module off each row's own `name:` line.
+	// A row's heading comes from its MODULE, and dsh resolves a row's `meta` by module name too (`metaOf(row.name,
+	// base)`), so two rows on one module are both called "dsh-command-context-trim" and read as one component. That is
+	// why the tuning row points at its own SUBPATH entry: `name` is a JS module specifier, not a patch file, so one
+	// bundle can mount two modules while still mounting exactly one patch. (A second patch FILE would never be read —
+	// a bundle mounts one — and a per-row `meta.title` cannot work either, since the meta is looked up per module.)
+	// The cards additionally name their own component in their copy, which covers the description.
 	const rowModules = [...patchSource.matchAll(/^\s+- id: (context-[a-z-]*)\n\s+name: (\S+)/gmu)].map((m) => [m[1], m[2]]);
 	assert.equal(rowModules.length, 2, 'both rows are declared, each with a name');
-	assert.equal(rowModules[0][1], rowModules[1][1], `both rows are on ${rowModules[0][1]}; the heading cannot distinguish them`);
+	assert.notEqual(rowModules[0][1], rowModules[1][1], 'the two rows must sit on DIFFERENT modules, or both headings read the same');
+	assert.equal(rowModules[0][1], 'dsh-command-context-trim', 'the trims keep the package name');
+	assert.equal(rowModules[1][1], 'dsh-command-context-trim/tune', 'the tuner sits on a subpath entry');
+	assert.equal(manifest.exports['./tune'], './lib/tune.js', 'and that entry has to exist, or the row never starts');
+	assert.ok(manifest.files.includes('lib'), 'and the whole `lib` directory ships, so the entry is in the tarball');
 	assert.match(clientSource, /cardTrimIntro/u, 'so the trim card names itself');
 	assert.match(clientSource, /cardTuneIntro/u, 'and so does the tune card');
 	assert.match(patchSource, /- id: context-tuning$/mu, 'the tuning row must be declared in the one patch a bundle mounts');
 	assert.match(patchSource, /role: tuning/u, 'the tuning row must declare the role its module dispatches on');
-	// The row must point at a DISTINCT MODULE, because a row's heading comes from its module and two rows on one entry
-	// are both called "dsh-command-context-trim". A row's `name` is a JS module specifier, not a patch file.
-	// Both files must ship, or the bundle declares a row whose module is not there.
-	assert.ok(manifest.files.includes('cordis.tune.yml'), 'cordis.tune.yml must be in `files`');
-	assert.ok(manifest.exports['./cordis.tune.yml'] === './cordis.tune.yml', 'and exported');
+	assert.ok(manifest.files.includes('locale'), 'locale directory must ship so display metadata is packaged');
+	assert.equal(manifest.exports['./locale/*.json'], './locale/*.json', 'trim locale files are exported');
+	assert.equal(manifest.exports['./tune/locale/*.json'], './locale/tune/*.json', 'tuning locale files are exported');
 	assert.match(clientSource, /whileServed\(\[row\.rowId\]/u, 'each card must be gated on its own row namespace');
 });
 
@@ -123,7 +127,8 @@ test('the card follows the 0.1.7 contract: summary one-liner, shared body, no ow
 	assert.match(clientSource, /const inject = \['slots', 'locale', 'configForms'\]/u);
 	assert.match(clientSource, /exports\.apply = apply/u);
 	assert.equal(/^\s*(import|export)\s/mu.test(clientSource), false, 'no ES module syntax in a served client bundle');
-	assert.match(clientSource, /if \(props\.view === 'summary'\) return t\('description'\)/u);
+	assert.match(clientSource, /view === 'summary'\) return t\(role === 'tuning' \? 'tuneDescription' : 'description'\)/u,
+		"each row returns its OWN one-liner: the page falls back to it for a row with no meta.description");
 	// The row slot, keyed `<package>#<row id>` — the contract for a third-party bundle. `plugins.item` is the
 	// official slot: a card parked there still renders, but mislabelled under "Official" and, measured on 0.2.0,
 	// refused on save. The key fails silently if wrong, so all three pieces are asserted.
@@ -159,4 +164,41 @@ test('the two names are one family: the row and the command share the context-tu
 	assert.match(hostSource, /moved to \/context-tune/u);
 	// The trims keep their own short command; only the tuning half was renamed, because `/trim` predates the split.
 	assert.match(hostSource, /name: 'trim'/u);
+});
+
+test('each row carries its own display meta, in both languages, where the page can actually read it', () => {
+	// A Plugins-page row's title and description come from `row.meta`, resolved by `readPluginMeta(specifier)`, which
+	// reads `${specifier}/locale/en.json` and then every `*.json` beside it. That is the ONLY source of a row's text on
+	// the LIST page: the `view: 'summary'` slot is consulted inside `RowDetail` (a row's own settings page), never in the
+	// row list, so an ungated summary registration does nothing there and collides when the form opens.
+	//
+	// Two things have to hold at once, and the second is invisible until the first breaks:
+	//   1. the JSON carries `meta.title` / `meta.description`;
+	//   2. `exports` lets Node RESOLVE `${specifier}/locale/en.json`, or resolution throws
+	//      ERR_PACKAGE_PATH_NOT_EXPORTED and meta silently comes back undefined.
+	// The old exports assertions covered (2); nothing read the files, so a missing or empty locale file would have
+	// failed silently — the row's text just falls back to the package name and the row goes blank.
+	const rows = [
+		{ specifier: 'dsh-command-context-trim', dir: 'locale', expect: { en: /trim/i, zh: /裁剪/ } },
+		{ specifier: 'dsh-command-context-trim/tune', dir: 'locale/tune', expect: { en: /tuning|compaction/i, zh: /调优/ } }
+	];
+	const seen = [];
+	for (const row of rows) {
+		for (const lang of ['en', 'zh']) {
+			const file = new URL(`../${row.dir}/${lang}.json`, import.meta.url);
+			assert.ok(existsSync(file), `${row.dir}/${lang}.json must exist: readPluginMeta reads ${row.specifier}/locale/en.json and its siblings`);
+			const parsed = JSON.parse(readFileSync(file, 'utf8'));
+			const meta = parsed.meta ?? {};
+			assert.equal(typeof meta.title, 'string', `${row.dir}/${lang}.json needs meta.title`);
+			assert.equal(typeof meta.description, 'string', `${row.dir}/${lang}.json needs meta.description`);
+			assert.ok(meta.title.length > 0 && meta.description.length > 20, `${row.dir}/${lang}.json meta must not be empty`);
+			assert.match(meta.title, row.expect[lang], `${row.dir}/${lang}.json title must name ITS OWN half in ${lang}`);
+		}
+		seen.push(JSON.parse(readFileSync(new URL(`../${row.dir}/en.json`, import.meta.url), 'utf8')).meta.title);
+	}
+	assert.notEqual(seen[0], seen[1], 'the two rows must not share a title — that is the whole point of splitting the module');
+
+	assert.equal(manifest.exports['./locale/*.json'], './locale/*.json');
+	assert.equal(manifest.exports['./tune/locale/*.json'], './locale/tune/*.json');
+	assert.ok(manifest.files.includes('locale'), 'locale must ship, or the published package resolves no meta at all');
 });
