@@ -5,6 +5,12 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-10-01
+
+### Added
+
+- **Multi-component row titles and descriptions on Plugins page.** Exported `./tune` subpath entry and dedicated locale files (`locale/en.json`, `locale/zh.json`, `locale/tune/en.json`, `locale/tune/zh.json`) so that both `context-trim` and `context-tuning` display distinct human-readable titles and descriptions in English and Chinese.
+
 ### Changed
 
 - **Modularized client bundle (`lib/client.js`) into `src/client/`.** Decomposed the monolithic browser bundle into structured modules under `src/client/` (`constants.js`, `locales.js`, `helpers.js`, `form.js`, `components.js`, `lifecycle.js`), assembled via `scripts/build-client.js`. Verified by `test/client-bundle.test.js` to stay byte-identical.
@@ -861,7 +867,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.1...v0.6.2
