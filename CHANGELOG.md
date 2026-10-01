@@ -5,6 +5,15 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Modularized client bundle (`lib/client.js`) into `src/client/`.** Decomposed the monolithic browser bundle into structured modules under `src/client/` (`constants.js`, `locales.js`, `helpers.js`, `form.js`, `components.js`, `lifecycle.js`), assembled via `scripts/build-client.js`. Verified by `test/client-bundle.test.js` to stay byte-identical.
+- **Partitioned `lib/preset-tune.js` by extracting `rescuePreset` into `lib/preset-rescue.js`.** Aligned with the standalone architecture of `lib/preset-reset.js`. `rescuePreset` remains re-exported from `lib/preset-tune.js` for backwards compatibility.
+- **Scoped `SYNCED_PRESETS` in `lib/tune-runtime.js` via `WeakMap`.** Isolated preset sync tracking per Cordis context instance rather than process-global state, preventing cross-profile state leakage.
+- **Consolidated `describeError` helper into `lib/render.js`.** Removed duplicate error formatting logic across `lib/target.js` and `lib/tune-runtime.js`.
+- **Dynamic volatile toggle for `autoTrim`.** `registerAutoTrim` attaches the overflow listener unconditionally and dynamically re-checks `config().autoTrim` on each trigger, enabling immediate GUI switch toggling.
+- **Cleaned duplicate keys in `Config` schema.** Consolidated redundant property definitions in `lib/index.js` object literal.
+
 ## [0.6.4] - 2026-09-29
 
 ### Documentation

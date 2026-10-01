@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { DEFAULTS } from '../lib/config.js';
 
 /**
@@ -180,7 +181,7 @@ test('the bundle registers into the keyed row slot behind the served namespace o
 	// `plugins.item`: that slot belongs to the official settings pages, and a card parked there renders under
 	// "Official" while its Save is refused (measured on 0.2.0).
 	// One keyed entry per row, or a row simply has no Configure button and nothing is logged.
-	assert.equal(registered.length, 2, 'one card per row');
+	assert.equal(registered.length, 2, 'each row registers its gated form');
 	for (const row of ['context-trim', 'context-tuning']) {
 		const { options } = cardFor(registered, row);
 		assert.equal(options.name, 'plugins.row.config');
@@ -229,7 +230,10 @@ test('the component returns the summary one-liner and the five-field form body',
 		useTrimCard: (select) => select(injected.hooks.trimCard.getSnapshot()),
 		...injected
 	};
-	assert.equal(component({ ...props, view: 'summary' }), 'description', 'the row shows our one-liner, not the npm description');
+	// These props are the TUNING row's, so the one-liner it shows is its own copy, not the trims': a row's
+	// description falls back to whatever its own card returns for `view: 'summary'`, so sharing one string here
+	// would make both rows read identically on the Plugins page.
+	assert.equal(component({ ...props, view: 'summary' }), 'tuneDescription', 'the row shows OUR one-liner, and it is the half this row owns');
 
 	const tree = component({ ...props, view: 'detail' });
 	assert.equal(tree.type, primitives.SettingsForm, 'the platform supplies the frame; we render only its body');
@@ -463,3 +467,45 @@ test('each row renders its OWN card: the trims get their thirteen knobs, the tun
 	assert.equal(trimIds.some((id) => id.startsWith('plugin-config-tune-')), false, 'the trim card owns only its prefix');
 	assert.equal(tuneIds.some((id) => id.startsWith('plugin-config-trim-')), false, 'the tune card owns only its prefix');
 });
+
+test('the two rows are told apart: separate summary copy, and the tuning row has its own module', async () => {
+	// The Plugins page shows a row's heading from its MODULE and resolves a row's `meta` by module name too, so two
+	// rows on one module are both called "dsh-command-context-trim" and read as one component. The tuning row
+	// therefore points at its own subpath entry, and each card returns its OWN one-liner: a row's description falls
+	// back to what its own `view: 'summary'` returns, so sharing one string shares one description.
+	const registration = await loadBundle();
+	const { primitives, react } = stubs();
+	const { context, registered } = stubContext();
+	registration.factory((id) => (id === 'react' ? react : primitives)).apply(context);
+
+	const summaryOf = (rowId) => {
+		const { options, component: wrapper } = cardFor(registered, rowId);
+		const injected = options.inject();
+		const el = wrapper({ t: (key) => key, view: 'summary', useTrimCard: (sel) => sel(injected.hooks.trimCard.getSnapshot()), ...injected });
+		return el.type(el.props);
+	};
+	const trims = summaryOf('context-trim');
+	const tune = summaryOf('context-tuning');
+	assert.notEqual(trims, tune, 'the two rows must not return the same one-liner');
+	assert.equal(trims, 'description');
+	assert.equal(tune, 'tuneDescription', "the tuning row's summary names its own copy");
+
+	// And the row that must be identifiable declares its own module.
+	const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
+	const names = [...patch.matchAll(/^\s+- id: (context-[\w-]+)\n\s+name: (\S+)/gmu)].map((m) => [m[1], m[2]]);
+	assert.equal(names.length, 2, 'both rows are declared with a module');
+	assert.notEqual(names[0][1], names[1][1], 'and they must be DIFFERENT modules, or both headings read the same');
+	assert.equal(names[1][1], 'dsh-command-context-trim/tune');
+	// That module has to exist, or the row never starts.
+	const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+	assert.equal(manifest.exports['./tune'], './lib/tune.js', 'the subpath entry is exported');
+	assert.ok(readFileSync(new URL('../lib/tune.js', import.meta.url), 'utf8').includes("from './index.js'"), 'and it re-exports the one implementation');
+});
+
+test('lib/client.js stays byte-identical to the assembly of src/client', async () => {
+	const { buildClientBundle } = await import('../scripts/build-client.js');
+	const assembled = await buildClientBundle();
+	const onDisk = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
+	assert.equal(onDisk, assembled, 'lib/client.js is out of sync with src/client/; run node scripts/build-client.js');
+});
+

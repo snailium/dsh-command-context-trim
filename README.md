@@ -685,9 +685,26 @@ repaired by trimming and that summarisation never ran.
 
 ```bash
 npm install            # the harness contracts this plugin builds on, pinned as devDependencies
-npm test               # node --test
+npm test               # node --test (all 173 unit tests)
+npm run build:client   # assemble modular sources under src/client/ into lib/client.js
 npm run link:harness   # or resolve @deepseek-ai from a local dsh installation instead of npm
 ```
+
+### Client Bundle Workflow (`src/client/` → `lib/client.js`)
+
+The browser settings cards are authored as modular source files under `src/client/`:
+- `constants.js`: Field definitions (`TRIM_FIELDS`, `TUNE_FIELDS`), defaults, namespaces.
+- `locales.js`: English and Chinese i18n dictionaries and label lookup helpers.
+- `helpers.js`: Pure helpers (`asBoolean`, `effective`, `parseEdit`, `displayText`).
+- `form.js`: Stateful React controller class (`TrimForm`).
+- `components.js`: Card views (`TrimCard`, `trimCardBody`, switch controls).
+- `lifecycle.js`: Slot registration and Cordis page lifecycle.
+
+**Do not edit `lib/client.js` directly.** Edit `src/client/` and run:
+```bash
+npm run build:client
+```
+The test suite (`test/client-bundle.test.js`) verifies that `lib/client.js` is byte-identical to `src/client/` assembly; any unbuilt changes or manual edits fail `npm test` immediately.
 
 Tests cover the pure planner and argument parser, the surface mutation against a real `Session` (including log replay),
 the plugin's command registration and end-to-end trim over a stub context, and — against the real `ctx.tokenMeter` — that a

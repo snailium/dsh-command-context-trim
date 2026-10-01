@@ -284,6 +284,16 @@ host 平面碰不到它——插件会**报告**这一点（`/context-tune prese
 更低的**真实**上限，并且对前 `TOOL_STEPS` 个请求回以工具调用，于是一个 turn 会不断循环、越过真实上限——这就是
 上下文墙，且不需要切换模型。
 
+### 前端卡片开发工作流（`src/client/` → `lib/client.js`）
+
+设置页面的前端卡片源码按模块维护在 `src/client/` 目录下（包含常量、i18n 多语言、辅助函数、表单控制器、卡片组件及生命周期注入）。
+
+**切勿直接修改 `lib/client.js`**。修改前端代码后，需运行：
+```bash
+npm run build:client
+```
+测试套件（`test/client-bundle.test.js`）会在 `npm test` 中对 `lib/client.js` 与 `src/client/` 组装产物进行逐字节一致性校验，任何未构建的改动或直接修改打包产物的行为都会导致测试失败。
+
 ### 验证状态
 
 见英文 `README.md` 的 *Verification status* 表（149 个测试、隔离实例验证、0.3.9–0.4.4 的各项证据，以及 Bonsai 2
