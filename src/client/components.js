@@ -186,7 +186,6 @@ export function TrimCard(props) {
 		});
 	const switchToggle = (field) => (next) => actions.edit(field, next ? 'true' : 'false');
 	const autoTuneOn = asBoolean(effective(state, 'autoTuneCompaction'));
-	const stockDisabledOn = asBoolean(effective(state, 'tuneStockDisabledRoutes'));
 	return h(
 		SettingsForm,
 		{ labels: formLabels(t), state, onSave: actions.save, onDiscard: actions.discard },
@@ -205,17 +204,6 @@ export function TrimCard(props) {
 			overridden: state.autoTuneCompaction?.overridden === true,
 			onToggle: switchToggle('autoTuneCompaction'),
 			onReset: () => actions.resetField('autoTuneCompaction')
-		}),
-		switchField({
-			id: 'plugin-config-tune-stock-disabled',
-			label: t('tuneStockDisabledRoutes'),
-			hint: t('tuneStockDisabledRoutesHint'),
-			checked: stockDisabledOn,
-			disabled,
-			t,
-			overridden: state.tuneStockDisabledRoutes?.overridden === true,
-			onToggle: switchToggle('tuneStockDisabledRoutes'),
-			onReset: () => actions.resetField('tuneStockDisabledRoutes')
 		}),
 		sectionHeading(t('sectionPrune')),
 		h(

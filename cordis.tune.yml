@@ -16,5 +16,4 @@
 #   compactionTargetRatio: 0.8      fraction of each routed window at which compaction fires
 #   compactionRoute:                "provider:model" the generated preset summarises on
 #   autoTuneCompaction: false       retune this profile's compaction row at runtime
-#   tuneStockDisabledRoutes: false  also tune routes whose stock headroom disables the trigger
 #   prunerThresholdChars            'auto' derives it from the routed window; 0 opts out, a number overrides

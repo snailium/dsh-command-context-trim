@@ -118,7 +118,7 @@ function stubContext() {
 	// The Host's effective configuration, which a landed write really changes — without this, a second save of the
 	// same value would look like "nothing to do" and the test would be measuring the stub, not the card.
 	const values = {
-		'context-tuning': { role: 'tuning', compactionTargetRatio: 0.8, autoTuneCompaction: false, tuneStockDisabledRoutes: false, prunerThresholdChars: 'auto' },
+		'context-tuning': { role: 'tuning', compactionTargetRatio: 0.8, autoTuneCompaction: false, prunerThresholdChars: 'auto' },
 		'context-trim': { role: 'trim', targetRatio: 0.9, retainRatio: 0.16, minTailTokens: 2048, reserveOutputTokens: 8192, protectHeadNodes: 1, maxAutoTrimRetries: 3, allowTailTrim: true, autoTrim: true, emergencyTrim: true, preferInPlacePrune: true, pruneThresholdChars: 8192, pruneHeadChars: 4096, pruneTailChars: 1024 }
 	};
 	const context = {
@@ -196,12 +196,11 @@ test('the bundle registers into the keyed row slot behind the served namespace o
 		['compactionTargetRatio', 'number'],
 		['compactionRoute', 'text'],
 		['autoTuneCompaction', 'boolean'],
-		['tuneStockDisabledRoutes', 'boolean'],
 		['prunerThresholdChars', 'pruner']
 	]);
 });
 
-test('the component returns the summary one-liner and the five-field form body', async () => {
+test('the component returns the summary one-liner and the four-field form body', async () => {
 	const registration = await loadBundle();
 	const { primitives, react, calls } = stubs();
 	registration.factory((id) => (id === 'react' ? react : primitives));
@@ -252,7 +251,7 @@ test('the component returns the summary one-liner and the five-field form body',
 	// children[0] is now the card's one-line introduction, which is what tells the two cards apart in the UI.
 	assert.ok(headingText(tree.children[0]).includes('cardTuneIntro'), 'the card says which component it configures');
 	assert.ok(headingText(tree.children[1]).includes('sectionCompaction'), 'then the Compaction section');
-	assert.ok(headingText(tree.children[6]).includes('sectionPrune'), 'then the Prune section, before the pruner control');
+	assert.ok(headingText(tree.children[5]).includes('sectionPrune'), 'then the Prune section, before the pruner control');
 
 	// The two text controls stay ordinary value fields.
 	const ratio = tree.children[2];
@@ -277,14 +276,8 @@ test('the component returns the summary one-liner and the five-field form body',
 	assert.ok(autoHint.includes('autoTuneHeadlessOnly'), 'the caveat rides the control');
 	assert.ok(autoHint.includes('strong'), 'and it is bold');
 
-	// Enable stock-disabled routes is a switch too.
-	const stockSwitch = tree.children[5];
-	const stockButton = stockSwitch.children[0].children[1];
-	assert.equal(stockButton.type?.name, 'Switch');
-	assert.equal(stockButton.props.checked, false);
-
 	// The pruner: a mode select plus a number box that only exists for Custom.
-	const pruner = tree.children[7];
+	const pruner = tree.children[6];
 	const select = pruner.children[0].children[1];
 	assert.equal(select.props.value, 'auto', 'an unset threshold renders as Auto, not blank');
 	assert.deepEqual(select.children.map((option) => option.props.value), ['disabled', 'auto', 'custom']);
@@ -321,7 +314,7 @@ test('the card\'s default mirror matches the plugin\'s own defaults', async () =
 	// drift, the page quietly lies about what the plugin will do.
 	const { DEFAULTS } = await import('../lib/config.js');
 	const exported = (await loadBundle()).factory(require_stub()).FIELD_DEFAULTS;
-	for (const field of ['compactionTargetRatio', 'autoTuneCompaction', 'tuneStockDisabledRoutes']) {
+	for (const field of ['compactionTargetRatio', 'autoTuneCompaction']) {
 		assert.equal(exported[field], DEFAULTS[field], `${field} mirror must match DEFAULTS`);
 	}
 	// `compactionRoute` has no default at all; the card shows an empty field for it.
@@ -414,8 +407,8 @@ test('each half owns its own fields, and the two similar names never cross over'
 	assert.equal(DEFAULTS.prunerThresholdChars, 'auto', "the tuner's pruner threshold");
 });
 
-test('each row renders its OWN card: the trims get their thirteen knobs, the tuner its five', async () => {
-	// The whole point of the split. Before it, there was one card, bound to the trim row, showing the tuner's five
+test('each row renders its OWN card: the trims get their thirteen knobs, the tuner its four', async () => {
+	// The whole point of the split. Before it, there was one card, bound to the trim row, showing the tuner's four
 	// fields under a row named `/trim` — so the trims had no settings of their own and the visible knobs belonged to a
 	// different component. Each card must now render only its own row's fields, from its own row's config namespace.
 	const registration = await loadBundle();
@@ -457,7 +450,7 @@ test('each row renders its OWN card: the trims get their thirteen knobs, the tun
 	// ── the tune card ──────────────────────────────────────────────────────────
 	const tune = render('context-tuning');
 	const tuneIds = idsIn(tune.tree);
-	for (const key of ['compactionTargetRatio', 'compactionRoute', 'auto-tune', 'stock-disabled', 'pruner-threshold', 'pruner-mode']) {
+	for (const key of ['compactionTargetRatio', 'compactionRoute', 'auto-tune', 'pruner-threshold', 'pruner-mode']) {
 		assert.ok(tuneIds.includes(`plugin-config-tune-${key}`), `the tune card shows ${key}`);
 	}
 	for (const key of ['targetRatio', 'retainRatio', 'emergencyTrim', 'pruneThresholdChars']) {

@@ -45,9 +45,6 @@ const USAGE = `usage: make-preset-patch.mjs --base <preset.patch.yml|plugins.yml
                               also raise the tool-result pruner's thresholdChars (dsh default 8192),
                               so one whole-file read is not clipped away; headChars/tailChars keep
                               dsh's defaults unless you edit the emitted row
-  --include-stock-disabled-routes
-                              enable a pressure trigger even on routes whose stock profile has none
-                              (default: keep them at stock; see the caution in the output)
   --window-agnostic    deliberately tune the ratio alone, needing no window at all
   --summarizer-max-tokens <n>  cap for the compaction call itself (default: 8192)
   --route <p:m>        summarization route for the compaction call
@@ -92,8 +89,7 @@ const plan = resolved.routes.length > 0
 	? planCompactionTuning({
 			routes: resolved.routes,
 			targetRatio,
-			summarizationRoute,
-			includeStockDisabled: args['include-stock-disabled-routes'] === true
+			summarizationRoute
 		})
 	: {
 			config: {
@@ -176,7 +172,7 @@ function parseArgs(argv) {
 			process.exit(0);
 		}
 		const key = arg.replace(/^--/u, '');
-		if (key === 'window-agnostic' || key === 'include-stock-disabled-routes') {
+		if (key === 'window-agnostic') {
 			out[key] = true;
 			continue;
 		}

@@ -54,8 +54,7 @@ test('exactly the two tuning fields are volatile, so the card shows exactly thos
 		'prunerThresholdChars',
 		'reserveOutputTokens',
 		'retainRatio',
-		'targetRatio',
-		'tuneStockDisabledRoutes'
+		'targetRatio'
 	]);
 	const json = Config.toJSON();
 	const route = json.refs[json.refs[json.uid].dict.compactionRoute.uid ?? json.refs[json.uid].dict.compactionRoute];

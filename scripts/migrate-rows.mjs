@@ -31,7 +31,6 @@ const TUNING_ROW = 'context-tuning';
 const TUNING_KEYS = {
 	compactionTargetRatio: '0.8',
 	autoTuneCompaction: 'false',
-	tuneStockDisabledRoutes: 'false',
 	prunerThresholdChars: "'auto'"
 };
 

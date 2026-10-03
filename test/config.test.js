@@ -129,12 +129,11 @@ test('a tuning row writes a real boolean, and only the keys it sets', async () =
 	const overrides = explicitOverridesFor({
 		role: 'tuning',
 		autoTuneCompaction: handle(true),
-		tuneStockDisabledRoutes: handle(false),
 		prunerThresholdChars: handle(16384),
 		retainRatio: 0.3,
 		role2: 'ignored'
 	});
-	assert.deepEqual(overrides, { autoTuneCompaction: true, tuneStockDisabledRoutes: false, prunerThresholdChars: 16384 });
+	assert.deepEqual(overrides, { autoTuneCompaction: true, prunerThresholdChars: 16384 });
 	assert.equal(typeof overrides.autoTuneCompaction, 'boolean', 'a handle unwraps to its value');
 	assert.equal('retainRatio' in overrides, false, 'a trims knob never travels from the tuning row');
 });

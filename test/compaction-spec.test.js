@@ -66,8 +66,8 @@ test('planCompactionTuning emits one policy per usable route and states the top 
 		plan.policies.map((policy) => [policy.provider, policy.thresholdRatio, policy.headroomTokens]),
 		[
 			['b70-sycl', 0.8, 9831],
-			['bonsai-8gb', 0.8, 65536],
-			['ovms', 0.8, 65536],
+			['bonsai-8gb', 0.8, 0],
+			['ovms', 0.8, 0],
 			['opencode-go', 0.8, 0]
 		]
 	);
@@ -75,7 +75,7 @@ test('planCompactionTuning emits one policy per usable route and states the top 
 	// 81920/65536 route at 20 % and the 1M/384k route at 61.6 %.
 	const notes = plan.notes.join('\n');
 	assert.match(notes, /b70-sycl\/.*triggers at 80\.0 %/);
-	assert.match(notes, /ovms\/.*kept at stock .*no proactive trigger/);
+	assert.match(notes, /ovms\/.*caps the trigger at 20\.0 %/);
 	assert.match(notes, /opencode-go\/.*caps the trigger at 61\.6 %/);
 });
 
@@ -112,32 +112,20 @@ test('planCompactionTuning skips unusable routes with a reason and refuses an em
 	assert.throws(() => planCompactionTuning({ routes: ROUTES, targetRatio: 0 }), /compactionTargetRatio \(0\) must be a number in \(0, 1\]/);
 });
 
-test('a route whose stock profile has no pressure trigger is kept at stock by default', () => {
-	// 40960 - 8192 = 32768 message budget, below dsh's stock 65536 headroom: stock cannot trigger at all.
-	// Enabling one adds compaction events instead of moving one (measured on Bonsai 2: 15 -> 24 on one task),
-	// so the planner preserves the stock behaviour and makes enabling an explicit choice.
+test('a route whose stock profile has no pressure trigger is tuned automatically', () => {
+	// 40960 - 8192 = 32768 message budget, below dsh's stock 65536 headroom.
+	// The planner directly tunes it by computing the appropriate headroomTokens.
 	const routes = [
 		{ provider: 'lc', model: 'qwen', contextWindow: 131072, maxTokens: 16384 },
 		{ provider: 'lc', model: 'bonsai2', contextWindow: 40960, maxTokens: 8192 }
 	];
-	const kept = planCompactionTuning({ routes, targetRatio: 0.8 });
-	const keptPolicy = kept.policies.find((policy) => policy.model === 'bonsai2');
-	assert.equal(keptPolicy.headroomTokens, 65536, 'stock headroom, so the pressure budget stays negative');
-	assert.match(kept.notes.join('\n'), /bonsai2: kept at stock .*no proactive trigger .*overflow path stays the fallback/);
-	assert.match(kept.notes.join('\n'), /--include-stock-disabled-routes, or set tuneStockDisabledRoutes, to enable it anyway/);
+	const tuned = planCompactionTuning({ routes, targetRatio: 0.8 });
+	const bonsaiPolicy = tuned.policies.find((policy) => policy.model === 'bonsai2');
+	assert.equal(bonsaiPolicy.headroomTokens, 0, 'headroom computed as 0 so pressure trigger is active');
 	assert.equal(
-		kept.policies.find((policy) => policy.model === 'qwen').headroomTokens,
+		tuned.policies.find((policy) => policy.model === 'qwen').headroomTokens,
 		9831,
-		'the large route is still tuned, with the headroom its ratio needs'
+		'the large route is also tuned, with the headroom its ratio needs'
 	);
-
-	// Opting in enables it and keeps the measurement in front of the operator.
-	const enabled = planCompactionTuning({ routes, targetRatio: 0.8, includeStockDisabled: true });
-	const enabledPolicy = enabled.policies.find((policy) => policy.model === 'bonsai2');
-	assert.equal(enabledPolicy.headroomTokens, 0);
-	const caution = enabled.notes.find((note) => note.includes('caution'));
-	assert.ok(caution, JSON.stringify(enabled.notes));
-	assert.match(caution, /15 -> 24 on one task/);
-	assert.match(caution, /overflow path.*\/trim stays the model-free last resort/s);
-	assert.equal(enabled.notes.some((note) => note.includes('kept at stock')), false);
+	assert.match(tuned.notes.join('\n'), /bonsai2: triggers at 80\.0 % \(~32768 tokens\)/);
 });

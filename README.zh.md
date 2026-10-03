@@ -28,13 +28,6 @@ DSH 的压缩触发点是
 - 本插件把该路由的 headroom 设为 0（比例重新说了算）⇒触发点回到 **104857**（80 %）；
 - 效果就是**更少、更晚**的压缩：同样一段工作，压缩次数下降、每次压缩要处理的量更小。
 
-### 什么时候它不划算
-
-上面那份收益是"**更少、更晚**"的收益，只在 stock headroom **把一个本可支持的触发点压低了**的地方存在。当 stock
-headroom 直接把触发点**关掉**时（消息预算 ≤ 65536），把它打开并不会减少已有的压缩，只会**增加**事件——我们实测
-同一条任务从 15 次压缩涨到 24 次。因此 `tuneStockDisabledRoutes` 默认为 `false`：这类路由**保持原样**，继续靠
-`/trim` 与 DSH 自己的溢出路径兜住窗口。
-
 ### preset 路线是上锁的，而且必须保持可解析
 
 会话一旦开始，它的 preset 就固定了（`agent-preset/locked`），**fork 也继承父会话的 preset 并被同样上锁**：
@@ -198,12 +191,11 @@ Plugins 页面上的卡片显示的是**生效值，而不是"是否覆盖"**：
 | `preferInPlacePrune` | `true` | 规划任何区间之前，先就地瘦身过大的工具结果；能用到官方 pruner 时就用它 |
 | `compactionTargetRatio` | `0.8` | `/context-tune preset` 写进 preset 的触发比例（只塑造 preset，从不影响本插件自己的裁剪）|
 | `compactionRoute` | 未设置 | 生成 preset 的摘要调用所用的可选 `{provider, model}` |
-| `tuneStockDisabledRoutes` | `false` | 为 `false`（默认）时，*stock* 配置里没有压力触发的路由保持原样——在那里打开触发只会增加压缩事件（见*什么时候它不划算*），所以免模型的 `/trim` 与 DSH 的溢出路径继续兜住窗口。设为 `true` 才会一并调优这类路由 |
-| `prunerThresholdChars` | `auto`（`DSH_TRIM_PRUNER`）| 工具结果裁剪阈值。`auto` 按路由派生为 `max(8192, min(32768, 2 × (contextWindow − maxTokens)))`（各路由取最小），小窗口下一次整文件读取因此不会被裁掉（DSH 的 stock 值是 `8192`）。整数覆盖它；`0` 表示退出、保持不动。与 compaction 行同一平面，因此同样的可达性规则适用——web profile 把 pruner 放在每个会话的 preset 里，插件会报告这一点而不是写入。**小窗口**上这是最关键的杠杆（见*什么时候它不划算*）；**压力触发已启用**时它会放大提示词，那里要三思 |
+| `prunerThresholdChars` | `auto`（`DSH_TRIM_PRUNER`）| 工具结果裁剪阈值。`auto` 按路由派生为 `max(8192, min(32768, 2 × (contextWindow − maxTokens)))`（各路由取最小），小窗口下一次整文件读取因此不会被裁掉（DSH 的 stock 值是 `8192`）。整数覆盖它；`0` 表示退出、保持不动。与 compaction 行同一平面，因此同样的可达性规则适用——web profile 把 pruner 放在每个会话的 preset 里，插件会报告这一点而不是写入。**小窗口**上这是最关键的杠杆；**压力触发已启用**时它会放大提示词，那里要三思 |
 | `autoTuneCompaction` | `false` | 重新调优本进程的 compaction 行（仅在 compaction 位于 profile 平面时）。web 或生产 profile 应该设置**这一项**（通过设置卡片或补丁层）；覆盖它的 `DSH_TRIM_AUTO_TUNE` 环境变量只用于**自动化/CI** |
 | `pruneThresholdChars` / `pruneHeadChars` / `pruneTailChars` | `8192` / `4096` / `1024` | 就地瘦身的预算，镜像 DSH 自己的 pruner 默认值 |
 
-环境变量（供自动化/CI 覆盖对应配置项）：`DSH_TRIM_AUTO_TUNE`、`DSH_TRIM_PRUNER`、`DSH_TRIM_TUNE_STOCK_DISABLED`。
+环境变量（供自动化/CI 覆盖对应配置项）：`DSH_TRIM_AUTO_TUNE`、`DSH_TRIM_PRUNER`。
 
 ## 权限与失败边界
 

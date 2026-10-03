@@ -57,8 +57,7 @@ export const FIELD_DEFAULTS = {
 	// The compaction tuner's knobs, shown on the `tune` card.
 	compactionTargetRatio: 0.8,
 	compactionRoute: '',
-	autoTuneCompaction: false,
-	tuneStockDisabledRoutes: false
+	autoTuneCompaction: false
 	// NOT `prunerThresholdChars` again: that name belongs to the trims' own in-place pruner (a character count
 	// on a tool result). The tuner's is `prunerThresholdChars` on the OTHER row's schema, which is a separate
 	// namespace with its own default of 'auto' — see TUNING_CARD_FIELDS, which carries its own default.
@@ -71,7 +70,7 @@ export const PRUNER_MODES = [
 ];
 
 /**
- * The five fields this card writes, with the type each one must land as.
+ * The four fields this card writes, with the type each one must land as.
  *
  * `kind` decides the parse: a boolean field may not be written as the string `"true"` on 0.2.0, and the pruner
  * takes `'auto'` or a number. `default` is what an unset field displays, so the page shows what the plugin will
@@ -82,7 +81,6 @@ export const TUNING_CARD_FIELDS = [
 	{ key: 'compactionTargetRatio', kind: 'number', default: FIELD_DEFAULTS.compactionTargetRatio },
 	{ key: 'compactionRoute', kind: 'text', default: '' },
 	{ key: 'autoTuneCompaction', kind: 'boolean', default: FIELD_DEFAULTS.autoTuneCompaction },
-	{ key: 'tuneStockDisabledRoutes', kind: 'boolean', default: FIELD_DEFAULTS.tuneStockDisabledRoutes },
 	{ key: 'prunerThresholdChars', kind: 'pruner', default: FIELD_DEFAULTS.prunerThresholdChars }
 ];
 

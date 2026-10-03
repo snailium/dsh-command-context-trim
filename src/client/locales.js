@@ -43,9 +43,6 @@ export const en = {
 	autoTuneCompaction: 'Auto tune compaction at runtime',
 	autoTuneCompactionHint: 'Retunes the compaction trigger from each routed window as soon as the route is known.',
 	autoTuneHeadlessOnly: 'Headless profile only. A web profile must use the /context-tune preset command.',
-	tuneStockDisabledRoutes: 'Enable stock-disabled routes',
-	tuneStockDisabledRoutesHint:
-		'Only for windows at or below 64K, where dsh imposes no pressure trigger at all: on adds one (measured slower on one 40K task, 15 -> 24 compactions) and off keeps stock.',
 	prunerThresholdChars: 'Tool-result pruner threshold',
 	prunerThresholdCharsHint:
 		'Disabled leaves the pruner alone (0). Auto derives the clip threshold from the routed window (half the message budget, capped at 32768). Custom overrides it with a character count.',
@@ -121,9 +118,6 @@ export const zh = {
 	autoTuneCompaction: '运行时自动调优压缩阈值',
 	autoTuneCompactionHint: '路由确定后立即按窗口重算压缩触发点。',
 	autoTuneHeadlessOnly: '仅限 headless profile。web profile 需使用 /context-tune preset 命令来调优。',
-	tuneStockDisabledRoutes: '也启用 stock 已禁用的路由',
-	tuneStockDisabledRoutesHint:
-		'只对 64K 及以下窗口有意义（那里 dsh 完全没有压力触发）：开会增加一个（我们在一台 40K 上实测更慢，压缩 15 → 24），关则保持 stock。',
 	prunerThresholdChars: '工具结果裁剪阈值',
 	prunerThresholdCharsHint:
 		'Disabled = 不动 pruner（0）；Auto = 按路由窗口自动推导（半个消息预算，上限 32768）；Custom = 用你填的字符数覆盖。',

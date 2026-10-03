@@ -9,7 +9,6 @@ import { resolveConfig } from '../lib/config.js';
 test('boolean switches accept the text a settings card types', () => {
 	for (const text of ['true', 'TRUE', ' true ', 'yes', 'on', '1']) {
 		assert.equal(resolveConfig({ autoTuneCompaction: text }).autoTuneCompaction, true, text);
-		assert.equal(resolveConfig({ tuneStockDisabledRoutes: text }).tuneStockDisabledRoutes, true, text);
 	}
 	for (const text of ['false', 'no', 'off', '0']) {
 		assert.equal(resolveConfig({ autoTuneCompaction: text }).autoTuneCompaction, false, text);
@@ -18,7 +17,6 @@ test('boolean switches accept the text a settings card types', () => {
 	assert.equal(resolveConfig({ autoTuneCompaction: '' }).autoTuneCompaction, false);
 	assert.equal(resolveConfig({}).autoTuneCompaction, false);
 	assert.throws(() => resolveConfig({ autoTuneCompaction: 'maybe' }), /must be a boolean/u);
-	assert.throws(() => resolveConfig({ tuneStockDisabledRoutes: 'sure' }), /must be a boolean/u);
 });
 
 test('the pruner threshold accepts typed digits and still bounds them', () => {
@@ -40,10 +38,6 @@ test('the container entrypoint can turn on the small-window lever with one varia
 		assert.equal(resolveConfig({ prunerThresholdChars: 8192 }).prunerThresholdChars, 32768);
 		delete process.env.DSH_TRIM_PRUNER;
 		assert.equal(resolveConfig({ prunerThresholdChars: 8192 }).prunerThresholdChars, 8192, 'unset falls back to the profile');
-
-		process.env.DSH_TRIM_TUNE_STOCK_DISABLED = '1';
-		assert.equal(resolveConfig({}).tuneStockDisabledRoutes, true);
-		delete process.env.DSH_TRIM_TUNE_STOCK_DISABLED;
 
 		process.env.DSH_TRIM_PRUNER = 'abc';
 		assert.throws(() => resolveConfig({}), /must be an integer|must be 'auto'/u, 'garbage in DSH_TRIM_PRUNER must still throw');
