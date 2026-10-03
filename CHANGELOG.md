@@ -5,6 +5,13 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-02
+
+### Changed
+
+- **Uniform compaction auto-tuning across all context window sizes.** Removed the special-case `tuneStockDisabledRoutes` configuration, UI toggle, and `DSH_TRIM_TUNE_STOCK_DISABLED` environment variable. Low-context routes (e.g. 40K/48K windows where the message budget is under the stock 40,960 headroom) now automatically compute dynamic `headroomTokens` based on the target ratio instead of being bypassed by default.
+- **Client settings card streamlined.** Removed the obsolete stock-disabled switch from the `context-tuning` settings card, leaving clean controls for compaction ratio, compaction route, runtime auto-tuning, and tool-result pruner threshold.
+
 ## [0.6.5] - 2026-10-01
 
 ### Added
@@ -867,7 +874,8 @@ All notable changes to this project are documented here. This project adheres to
   content stays in the durable session log. v1 has no `/untrim`.
 - Requires a harness that exposes `ctx.commands`, `ctx.tokenMeter`, and `ctx.llm` (DeepSeek Harness 0.1.2-rc.1 or later).
 
-[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/snailium/dsh-command-context-trim/compare/v0.6.2...v0.6.3
