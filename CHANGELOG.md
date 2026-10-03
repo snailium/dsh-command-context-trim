@@ -12,6 +12,38 @@ All notable changes to this project are documented here. This project adheres to
 - **Uniform compaction auto-tuning across all context window sizes.** Removed the special-case `tuneStockDisabledRoutes` configuration, UI toggle, and `DSH_TRIM_TUNE_STOCK_DISABLED` environment variable. Low-context routes (e.g. 40K/48K windows where the message budget is under the stock 40,960 headroom) now automatically compute dynamic `headroomTokens` based on the target ratio instead of being bypassed by default.
 - **Client settings card streamlined.** Removed the obsolete stock-disabled switch from the `context-tuning` settings card, leaving clean controls for compaction ratio, compaction route, runtime auto-tuning, and tool-result pruner threshold.
 
+## [0.6.6] - 2026-10-01
+
+### Changed
+
+- **Small windows are tuned too, and `tuneStockDisabledRoutes` is gone.** Earlier releases left any route whose message
+  budget sat at or below dsh's 65536 **at stock**, on the strength of one measurement — on `Bonsai 2 @ RTX 5060 8GB`
+  (40960 / 8192) the 80 % trigger took compactions from **15 to 24**, which at 209–372 s per local summarizer call reads
+  as a net loss.
+
+  That reasoning assumed the overflow path picks up the slack, and it does not. Where the stock headroom disables the
+  trigger the route has **no proactive trigger at all**: compaction happens only after a request has already blown the
+  window, which is a systematic gap rather than a rare edge — with nothing scheduled, whether a run ever compacts depends
+  on where its own context happens to land, and a run that lands badly has no scheduled point at which to recover.
+  "Fewer compactions" is then not a saving: a bounded 209–372 s wait is a price, a stalled task is not a bounded cost.
+
+  Every route with a declared `contextWindow` and a message budget is tuned now. Where the requested ratio is unreachable
+  because the route's output reserve exceeds `(1 − r) × W`, the note reports the ratio that actually lands and what
+  would move it instead of the target.
+
+### Removed
+
+- **`tuneStockDisabledRoutes`** and its `--include-stock-disabled-routes` flag, along with the settings-card switch and
+  the `DSH_TRIM_TUNE_STOCK_DISABLED` env var. There is no longer a supported way to leave a route at stock; the removal
+  is the point, per the entry above.
+
+### Fixed
+
+- The READMEs still taught "leave a small-window route alone" and listed two sample rows as *kept at stock* while the
+  code did the opposite. Both tables now carry the values the code actually produces, measured by calling it: 40960/8192
+  → **32768 (80 %)**, 40960/16384 → **24576 (60 %)** — note the first of those is a value the skip logic could not even
+  report, because there was no trigger to report.
+
 ## [0.6.5] - 2026-10-01
 
 ### Added

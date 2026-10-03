@@ -41,33 +41,38 @@ Three consequences, in the order they matter:
    longer capped by a fixed reserve, so the session keeps roughly twice the conversation before anything is condensed.
 2. **Fewer compactions where the stock headroom was capping the trigger — and compaction is the expensive part.**
    It costs a model call that *blocks the turn* (measured at 209–372 s with a local summarizer), so compacting
-   later and less often removes those stalls. Read *When it does not pay* below before enabling this on a small
+   later and less often removes those stalls. See *Small windows get tuned too* below before enabling this on a small
    window: there the same mechanism works in reverse.
 3. **When the window is blown anyway, it is repaired without a model.** `/trim` shadows the oldest balanced span with
    a marker synchronously, with zero LLM calls: the turn continues in milliseconds instead of waiting minutes for a
    summarizer that may overflow for the very reason the request did. Installed in a profile, it also runs itself on
    `CONTEXT_WINDOW_EXCEEDED` (`emergencyTrim`), so the wall does not end the turn.
 
-### When it does not pay
+### Small windows get tuned too, on purpose
 
-The benefit above is a *fewer, later* compactions benefit, and it exists only where the stock headroom was **capping**
-a trigger the route could otherwise support. Where the stock headroom already **disables** the trigger outright — a
-message budget at or below dsh's 65536 — turning one on cannot move an existing compaction; it **adds** events, and
-every event is a summarizer call that blocks the turn.
+Earlier releases shipped a the removed `tuneStockDisabledRoutes` switch switch and left routes whose message budget sits at or below dsh's
+65536 **at stock**, on the strength of one measurement: on `Bonsai 2 @ RTX 5060 8GB` (40960 / 8192), same task, single
+route, tuning confirmed end to end, the 80 % trigger took compactions from **15 to 24**, and with a local summarizer at
+209–372 s per call that reads as a net loss.
 
-Measured on `Bonsai 2 @ RTX 5060 8GB` (40960 / 8192) by the backend-test session on 2026-09-27, same task, single
-route, tuning confirmed applied end to end: **15 → 24 compactions** with the 80 % trigger on, and prompt volume for
-the run grew with them. With a local summarizer at 209–372 s per call, that is a net loss even though no individual
-turn is wrong. So:
+That reasoning assumes the overflow path picks the slack up, and it does not. Where the stock headroom disables the
+trigger, the route has **no proactive trigger at all** — compaction happens only after a request has already blown the
+window, and that is a systematic gap rather than a rare edge: with nothing scheduled, whether a run ever compacts
+depends on where its own context happens to land, and a run that lands badly has no scheduled point at which to recover.
+"Fewer compactions" is then not a saving. A bounded 209–372 s wait is a price; a stalled task is not a bounded cost.
 
-- enable the tuning where it **raises** an existing trigger (`message budget > 65536`, i.e. the large-window rows
-  above, where 37.5 % becomes 80 %);
-- **leave a small-window route alone** (`message budget ≤ 65536`) and let dsh's **overflow path** be the fallback: it
-  still summarizes and retries when a request really exceeds the window, it is just rare instead of constant (the
-  overflow path does not resolve a pressure spec, so a negative pressure budget does not affect it). `/trim` then
-  remains the last-resort net, model-free, for the case where nothing else handled the error;
-- do not switch auto-tuning on globally for a fleet: it is a per-backend decision. `DSH_TRIM_AUTO_TUNE=1` belongs on
-  the backends whose window is big enough to benefit.
+So every route with a declared `contextWindow` and a message budget is tuned now, and the switch is gone. Where the
+requested ratio is unreachable because the route's own output reserve is larger than `(1 − r) × W`, the note says so
+out loud with the ratio that actually lands and what would move it, rather than silently reporting the target:
+
+```
+qwen38: 80.0 % is unreachable inside this route — the output reserve caps the trigger at
+66.7 % (~32768 tokens). Raise contextWindow or lower maxTokens to move it.
+```
+
+`/trim` and the overflow auto-trim remain the model-free nets underneath all of this: the trigger schedules the
+compaction, the pruner keeps one tool result from dominating, and the overflow listener is still what answers a request
+that blows the window regardless of any of it.
 
 Two honest limits. Where the route's own reserve is larger than `(1 − r) × W`, the ratio is *unreachable by
 construction* — `ovms` (81920/65536) and `opencode-go` are capped at 20 % and 61.6 % respectively; the tuner
