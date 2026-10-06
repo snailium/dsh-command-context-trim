@@ -193,6 +193,7 @@ export function TrimCard(props) {
 		sectionHeading(t('sectionCompaction')),
 		valueField('compactionTargetRatio', { numeric: true }),
 		valueField('compactionRoute'),
+		valueField('reasoningBudget', { numeric: true }),
 		switchField({
 			id: 'plugin-config-tune-auto-tune',
 			label: t('autoTuneCompaction'),

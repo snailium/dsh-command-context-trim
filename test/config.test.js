@@ -10,6 +10,7 @@ test('defaults match the documented bundle patch', () => {
 	assert.equal(resolved.emergencyTrim, true);
 	assert.equal(resolved.compactionTargetRatio, 0.8);
 	assert.equal(resolved.compactionRoute, undefined);
+	assert.equal(resolved.reasoningBudget, 0);
 	assert.equal(resolved.targetRatio, DEFAULTS.targetRatio);
 });
 
@@ -51,6 +52,12 @@ test('compaction tuning: the ratio is bounded and the route is all-or-nothing', 
 test('emergencyTrim is a boolean switch', () => {
 	assert.equal(resolveConfig({ emergencyTrim: false }).emergencyTrim, false);
 	assert.throws(() => resolveConfig({ emergencyTrim: 'yes' }), /emergencyTrim must be a boolean/);
+});
+
+test('reasoning budget accepts non-negative integers and rejects invalid values', () => {
+	assert.equal(resolveConfig({ reasoningBudget: 4096 }).reasoningBudget, 4096);
+	assert.throws(() => resolveConfig({ reasoningBudget: -1 }), /reasoningBudget \(-1\) must be a non-negative integer/);
+	assert.throws(() => resolveConfig({ reasoningBudget: 1.5 }), /reasoningBudget \(1\.5\) must be a non-negative integer/);
 });
 
 test('DSH_TRIM_AUTO_TUNE overrides the profile switch, and an unset variable means no opinion', () => {

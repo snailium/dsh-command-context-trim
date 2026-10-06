@@ -52,3 +52,27 @@ test('the loader schema admits the auto pruner setting the card can now type', (
 	assert.equal(resolveConfig({ prunerThresholdChars: 'auto' }).prunerThresholdChars, 'auto');
 	assert.equal(resolveConfig({ prunerThresholdChars: '0' }).prunerThresholdChars, 0);
 });
+
+test('the reasoning budget accepts typed digits, honors environment, and rejects nonsense', () => {
+	assert.equal(resolveConfig({ reasoningBudget: '4096' }).reasoningBudget, 4096);
+	assert.equal(resolveConfig({ reasoningBudget: 2048 }).reasoningBudget, 2048);
+	assert.equal(resolveConfig({}).reasoningBudget, 0, 'the default is 0');
+	assert.equal(resolveConfig({ reasoningBudget: '' }).reasoningBudget, 0, 'empty field falls back to default');
+	assert.throws(() => resolveConfig({ reasoningBudget: 'abc' }), /must be an integer/u);
+	assert.throws(() => resolveConfig({ reasoningBudget: -1 }), /non-negative integer/u);
+
+	const saved = { ...process.env };
+	try {
+		process.env.DSH_TRIM_REASONING_BUDGET = '8192';
+		assert.equal(resolveConfig({}).reasoningBudget, 8192, 'environment variable overrides default');
+		assert.equal(resolveConfig({ reasoningBudget: 4096 }).reasoningBudget, 8192, 'environment variable overrides profile');
+		delete process.env.DSH_TRIM_REASONING_BUDGET;
+		assert.equal(resolveConfig({ reasoningBudget: 4096 }).reasoningBudget, 4096);
+
+		process.env.DSH_TRIM_REASONING_BUDGET = 'invalid';
+		assert.throws(() => resolveConfig({}), /must be a non-negative integer/u);
+	} finally {
+		for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
+		Object.assign(process.env, saved);
+	}
+});

@@ -65,6 +65,9 @@ export const en = {
 	compactionRoute: 'Summarization route',
 	compactionRouteHint:
 		'Optional provider:model used by a generated preset for compaction summarization. Leave empty to keep the route defaults.',
+	reasoningBudget: 'Reasoning budget',
+	reasoningBudgetHint:
+		'Tokens reserved in headroom for reasoning/thinking models (e.g. 4096). Ensures physical context space remains for thought generation before compaction.',
 	unavailable: 'Configuration is unavailable in this deployment.',
 	readOnly: 'This deployment does not accept edits here.',
 	saveFailed: 'The deployment rejected these values; they are kept for you to edit.',
@@ -138,6 +141,8 @@ export const zh = {
 		'生成的预设按窗口的比例触发压缩（0–1，例如 0.8 表示 80%）。`/context-tune preset` 会把它写进生成的预设；它不改变 /trim 自身的裁剪行为。',
 	compactionRoute: '摘要路由',
 	compactionRouteHint: '可选，格式 provider:model，供生成的预设做压缩摘要；留空则沿用默认路由。',
+	reasoningBudget: '思考预算',
+	reasoningBudgetHint: '为思考/推理模型在 headroom 中预留的 token 数（如 4096），确保触发压缩前留足思考空间。',
 	unavailable: '当前部署无法读取配置。',
 	readOnly: '当前部署不接受在此修改。',
 	saveFailed: '部署拒绝了这些取值，已为你保留以便修改。',

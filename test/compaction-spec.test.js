@@ -129,3 +129,40 @@ test('a route whose stock profile has no pressure trigger is tuned automatically
 	);
 	assert.match(tuned.notes.join('\n'), /bonsai2: triggers at 80\.0 % \(~32768 tokens\)/);
 });
+
+test('headroomForRatio respects reasoningBudget as the headroom floor', () => {
+	// On 40K (40960 - 8192 = 32768, 40960 * 0.8 = 32768, ratio headroom = 0):
+	// A reasoning budget of 4096 elevates headroom from 0 to 4096.
+	assert.equal(headroomForRatio({ contextWindow: 40960, reservedCompletionTokens: 8192, thresholdRatio: 0.8, reasoningBudget: 4096 }), 4096);
+	// On 48K at 0.7 ratio (49152 - 8192 = 40960, 49152 * 0.7 = 34406, ratio headroom = 6554):
+	// Since 6554 > 4096, ratio headroom wins.
+	assert.equal(headroomForRatio({ contextWindow: 49152, reservedCompletionTokens: 8192, thresholdRatio: 0.7, reasoningBudget: 4096 }), 6554);
+	// On 128K (131072 - 16384 = 114688, 131072 * 0.8 = 104857, ratio headroom = 9831):
+	// Since 9831 > 4096, ratio headroom wins.
+	assert.equal(headroomForRatio({ contextWindow: 131072, reservedCompletionTokens: 16384, thresholdRatio: 0.8, reasoningBudget: 4096 }), 9831);
+	// Invalid reasoning budget throws
+	assert.throws(() => headroomForRatio({ contextWindow: 40960, reservedCompletionTokens: 8192, thresholdRatio: 0.8, reasoningBudget: -1 }), /reasoningBudget/);
+	assert.throws(() => headroomForRatio({ contextWindow: 40960, reservedCompletionTokens: 8192, thresholdRatio: 0.8, reasoningBudget: 1.5 }), /reasoningBudget/);
+});
+
+test('planCompactionTuning incorporates reasoningBudget into headroom and top level', () => {
+	const routes = [
+		{ provider: 'bonsai', model: 'mtp', contextWindow: 40960, maxTokens: 8192 },
+		{ provider: 'large', model: 'qwen', contextWindow: 131072, maxTokens: 16384 },
+		{ provider: 'custom', model: 'explicit', contextWindow: 40960, maxTokens: 8192, reasoningBudget: 2048 }
+	];
+	const plan = planCompactionTuning({ routes, targetRatio: 0.8, reasoningBudget: 4096 });
+	assert.equal(plan.config.headroomTokens, 4096, 'top-level headroom carries global reasoning budget');
+	const bonsai = plan.policies.find((p) => p.provider === 'bonsai');
+	assert.equal(bonsai.headroomTokens, 4096, 'bonsai headroom is elevated to 4096');
+	const large = plan.policies.find((p) => p.provider === 'large');
+	assert.equal(large.headroomTokens, 9831, 'large route keeps larger ratio headroom (9831 > 4096)');
+	const custom = plan.policies.find((p) => p.provider === 'custom');
+	assert.equal(custom.headroomTokens, 2048, 'per-route reasoningBudget overrides global setting');
+
+	// Spec check for bonsai: threshold is 40960 - 8192 - 4096 = 28672 (70%)
+	const spec = routedSpec({ contextWindow: 40960, reservedCompletionTokens: 8192, thresholdRatio: 0.8, headroomTokens: bonsai.headroomTokens });
+	assert.equal(spec.thresholdTokens, 28672);
+	assert.equal(spec.achievedRatio, 0.7);
+	assert.match(plan.notes.join('\n'), /bonsai\/mtp: 80\.0 % is capped at 70\.0 % \(~28672 tokens\) to reserve 4096 headroom for reasoning/);
+});

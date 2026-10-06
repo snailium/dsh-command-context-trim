@@ -2,7 +2,7 @@
 
 [English →](README.md)
 
-<!-- synced-with-readme: 0.6.6 -->
+<!-- synced-with-readme: 0.6.7 -->
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加一个**不调用任何模型**的 `/trim`：
 在真正溢出之前，把对话里最旧、最不重要的一段上下文裁掉，让会话能切到**窗口更小的模型**上继续跑；同时可以按路由
@@ -191,11 +191,12 @@ Plugins 页面上的卡片显示的是**生效值，而不是"是否覆盖"**：
 | `preferInPlacePrune` | `true` | 规划任何区间之前，先就地瘦身过大的工具结果；能用到官方 pruner 时就用它 |
 | `compactionTargetRatio` | `0.8` | `/context-tune preset` 写进 preset 的触发比例（只塑造 preset，从不影响本插件自己的裁剪）|
 | `compactionRoute` | 未设置 | 生成 preset 的摘要调用所用的可选 `{provider, model}` |
+| `reasoningBudget` | `0`（`DSH_TRIM_REASONING_BUDGET`）| 为思考/推理模型在 headroom 中预留的 token 数。取 `headroomTokens = max(reasoningBudget, ratioHeadroom)`，确保触发压缩前留足思考空间 |
 | `prunerThresholdChars` | `auto`（`DSH_TRIM_PRUNER`）| 工具结果裁剪阈值。`auto` 按路由派生为 `max(8192, min(32768, 2 × (contextWindow − maxTokens)))`（各路由取最小），小窗口下一次整文件读取因此不会被裁掉（DSH 的 stock 值是 `8192`）。整数覆盖它；`0` 表示退出、保持不动。与 compaction 行同一平面，因此同样的可达性规则适用——web profile 把 pruner 放在每个会话的 preset 里，插件会报告这一点而不是写入。**小窗口**上这是最关键的杠杆；**压力触发已启用**时它会放大提示词，那里要三思 |
 | `autoTuneCompaction` | `false` | 重新调优本进程的 compaction 行（仅在 compaction 位于 profile 平面时）。web 或生产 profile 应该设置**这一项**（通过设置卡片或补丁层）；覆盖它的 `DSH_TRIM_AUTO_TUNE` 环境变量只用于**自动化/CI** |
 | `pruneThresholdChars` / `pruneHeadChars` / `pruneTailChars` | `8192` / `4096` / `1024` | 就地瘦身的预算，镜像 DSH 自己的 pruner 默认值 |
 
-环境变量（供自动化/CI 覆盖对应配置项）：`DSH_TRIM_AUTO_TUNE`、`DSH_TRIM_PRUNER`。
+环境变量（供自动化/CI 覆盖对应配置项）：`DSH_TRIM_AUTO_TUNE`、`DSH_TRIM_PRUNER`、`DSH_TRIM_REASONING_BUDGET`。
 
 ## 权限与失败边界
 

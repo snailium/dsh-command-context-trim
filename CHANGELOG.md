@@ -5,6 +5,13 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-10-06
+
+### Added
+
+- **`reasoningBudget` support for compaction headroom.** Added support for reserving reasoning tokens in compaction headroom (`headroomTokens = max(reasoningBudget, ratioHeadroom)`), preventing reasoning/thinking models (e.g. Bonsai 2, DeepSeek-R1) from hitting the physical context window wall during generation and ensuring summarizer calls retain sufficient generation space.
+- Configurable via `reasoningBudget` config key, `DSH_TRIM_REASONING_BUDGET` environment variable, model definition (`reasoningBudget` on route), and the `context-tuning` settings card in the web UI.
+
 ## [0.6.6] - 2026-10-02
 
 ### Changed

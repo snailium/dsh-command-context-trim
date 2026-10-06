@@ -52,6 +52,7 @@ test('exactly the two tuning fields are volatile, so the card shows exactly thos
 		'pruneTailChars',
 		'pruneThresholdChars',
 		'prunerThresholdChars',
+		'reasoningBudget',
 		'reserveOutputTokens',
 		'retainRatio',
 		'targetRatio'

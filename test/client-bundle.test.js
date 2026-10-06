@@ -195,6 +195,7 @@ test('the bundle registers into the keyed row slot behind the served namespace o
 	assert.deepEqual(CARD_FIELDS.tuning.map((field) => [field.key, field.kind]), [
 		['compactionTargetRatio', 'number'],
 		['compactionRoute', 'text'],
+		['reasoningBudget', 'number'],
 		['autoTuneCompaction', 'boolean'],
 		['prunerThresholdChars', 'pruner']
 	]);
@@ -242,8 +243,8 @@ test('the component returns the summary one-liner and the four-field form body',
 	const labels = tree.children
 		.filter((child) => child.type?.name === 'SettingsValueField')
 		.map((child) => child.props.label);
-	// Ratio and route are always value fields; the pruner's number box exists only in Custom mode, so it is absent here.
-	assert.deepEqual(labels, ['compactionTargetRatio', 'compactionRoute']);
+	// Ratio, route and reasoningBudget are always value fields; the pruner's number box exists only in Custom mode, so it is absent here.
+	assert.deepEqual(labels, ['compactionTargetRatio', 'compactionRoute', 'reasoningBudget']);
 
 	// Section headings are plain nodes inside the form body (SettingsForm renders props.children directly).
 	// The stub keeps children on the node (`{type, props, children}`), not inside props.
@@ -251,13 +252,16 @@ test('the component returns the summary one-liner and the four-field form body',
 	// children[0] is now the card's one-line introduction, which is what tells the two cards apart in the UI.
 	assert.ok(headingText(tree.children[0]).includes('cardTuneIntro'), 'the card says which component it configures');
 	assert.ok(headingText(tree.children[1]).includes('sectionCompaction'), 'then the Compaction section');
-	assert.ok(headingText(tree.children[5]).includes('sectionPrune'), 'then the Prune section, before the pruner control');
+	assert.ok(headingText(tree.children[6]).includes('sectionPrune'), 'then the Prune section, before the pruner control');
 
-	// The two text controls stay ordinary value fields.
+	// The text controls stay ordinary value fields.
 	const ratio = tree.children[2];
 	const route = tree.children[3];
+	const budget = tree.children[4];
 	assert.equal(ratio.props.numeric, true);
 	assert.equal(ratio.props.hint, 'compactionTargetRatioHint');
+	assert.equal(budget.props.numeric, true);
+	assert.equal(budget.props.hint, 'reasoningBudgetHint');
 	// `onEdit` is fire-and-forget now: it stages into the card's own draft, and what it stages is
 	// asserted by the typed-operation tests below (the behaviour that actually matters).
 	assert.equal(typeof ratio.props.onEdit, 'function');
@@ -266,7 +270,7 @@ test('the component returns the summary one-liner and the four-field form body',
 	assert.equal(typeof route.props.onReset, 'function', 'reset goes through the card\'s own action');
 
 	// Auto tune is a switch, and its state comes from the effective value (FIELD_DEFAULTS), never from a blank field.
-	const autoSwitch = tree.children[4];
+	const autoSwitch = tree.children[5];
 	const autoControl = autoSwitch.children[0].children[1];
 	assert.equal(autoControl.type?.name, 'Switch', 'the shell ships the switch control');
 	const autoButton = autoControl;
@@ -277,7 +281,7 @@ test('the component returns the summary one-liner and the four-field form body',
 	assert.ok(autoHint.includes('strong'), 'and it is bold');
 
 	// The pruner: a mode select plus a number box that only exists for Custom.
-	const pruner = tree.children[6];
+	const pruner = tree.children[7];
 	const select = pruner.children[0].children[1];
 	assert.equal(select.props.value, 'auto', 'an unset threshold renders as Auto, not blank');
 	assert.deepEqual(select.children.map((option) => option.props.value), ['disabled', 'auto', 'custom']);
@@ -450,7 +454,7 @@ test('each row renders its OWN card: the trims get their thirteen knobs, the tun
 	// ── the tune card ──────────────────────────────────────────────────────────
 	const tune = render('context-tuning');
 	const tuneIds = idsIn(tune.tree);
-	for (const key of ['compactionTargetRatio', 'compactionRoute', 'auto-tune', 'pruner-threshold', 'pruner-mode']) {
+	for (const key of ['compactionTargetRatio', 'compactionRoute', 'reasoningBudget', 'auto-tune', 'pruner-threshold', 'pruner-mode']) {
 		assert.ok(tuneIds.includes(`plugin-config-tune-${key}`), `the tune card shows ${key}`);
 	}
 	for (const key of ['targetRatio', 'retainRatio', 'emergencyTrim', 'pruneThresholdChars']) {

@@ -47,6 +47,7 @@ const USAGE = `usage: make-preset-patch.mjs --base <preset.patch.yml|plugins.yml
                               dsh's defaults unless you edit the emitted row
   --window-agnostic    deliberately tune the ratio alone, needing no window at all
   --summarizer-max-tokens <n>  cap for the compaction call itself (default: 8192)
+  --reasoning-budget <n>       headroom reserved for reasoning/thinking models (default: 0)
   --route <p:m>        summarization route for the compaction call
   --registry <mode>    insert (default, for profiles without the registry) or override
   --mode <kind>        preset (default: a preset row + the registry default) or host
@@ -66,6 +67,7 @@ const routes = args.routes === undefined ? undefined : JSON.parse(readFileSync(a
 if (routes !== undefined && !Array.isArray(routes)) fail('--routes must contain a JSON array');
 const presetId = args.id ?? 'standard-tuned';
 const targetRatio = Number(args.ratio ?? 0.8);
+const reasoningBudget = Number(args['reasoning-budget'] ?? 0);
 const summarizationRoute = args.route === undefined ? undefined : parseRoute(args.route);
 const summarizerMaxTokens = Number(args['summarizer-max-tokens'] ?? FALLBACK_SUMMARIZER_MAX_TOKENS);
 let resolved;
@@ -89,12 +91,13 @@ const plan = resolved.routes.length > 0
 	? planCompactionTuning({
 			routes: resolved.routes,
 			targetRatio,
+			reasoningBudget,
 			summarizationRoute
 		})
 	: {
 			config: {
 				thresholdRatio: targetRatio,
-				headroomTokens: 0,
+				headroomTokens: reasoningBudget > 0 ? reasoningBudget : 0,
 				maxTokens: summarizerMaxTokens,
 				...(summarizationRoute === undefined ? {} : { summarizationProvider: summarizationRoute.provider, summarizationModel: summarizationRoute.model })
 			},

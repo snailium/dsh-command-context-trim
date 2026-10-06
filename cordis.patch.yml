@@ -80,5 +80,6 @@
         role: tuning
         # compactionTargetRatio: 0.8      # fraction of each routed window at which compaction fires
         # compactionRoute:                # "provider:model" the generated preset summarises on
+        # reasoningBudget: 0              # tokens reserved in headroom for reasoning/thinking models
         # autoTuneCompaction: false       # retune this profile's compaction row at runtime
         # prunerThresholdChars            # 'auto' derives it from the routed window; 0 opts out, a number overrides
