@@ -280,6 +280,7 @@ serves both.
 | 0.1.5-rc.2 / 0.1.5-rc.3 | **`0.1.x` only** | the settings card needs `configForms` and schemastery's `.volatile()`, and 0.1.5 has neither — see below |
 | 0.1.7-rc.2 | latest (0.6.x) | unchanged in 0.2.0 for everything this plugin does |
 | 0.2.0-rc.2 | latest (0.6.x) | the first release that saves a card write correctly on this line |
+| 0.2.1-rc.2 | latest (0.6.x) | verified against 0.2.1-rc.2: no API change this plugin depends on, both rows load and both cards render |
 
 Why 0.1.5 is fenced off rather than merely degraded: 0.1.5 predates both halves of the card contract. Its web host
 serves no `configForms` service, so there is no form to render and nothing to save into, and its schemastery predates
@@ -322,6 +323,7 @@ need. Verified state, by feature:
 | 0.1.5-rc.3 | ✅ | ✅ | ✅ | ❌ clear error | ❌ absent |
 | 0.1.7-rc.2 (`next`) | ✅ | ✅ | ✅ | ✅ | ✅ (schemastery ≥ 3.18.4) |
 | 0.2.0-rc.2 | ✅ | ✅ | ✅ | ✅ | ✅ (two cards, one per row — needs 0.5.0+) |
+| 0.2.1-rc.2 | ✅ | ✅ | ✅ | ✅ | ✅ (verified on 0.2.1-rc.2: 2 components running, both Configure controls present) |
 
 What the ❌ entries mean in practice:
 

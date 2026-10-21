@@ -5,6 +5,19 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **dsh 0.2.1-rc.2 is verified and declared compatible.** The `dsh.compatibility.dshReleases` map now lists
+  `0.2.1-rc.2`, and both READMEs state it. No runtime change was needed: every API this plugin imports
+  (`createUserMessage`, `freezeMessage`, `CONTEXT_WINDOW_EXCEEDED_CODE`, `Session`, `canonicalHeader`,
+  `toolPairingBalancedAfter`/`Before`) is byte-identical between 0.2.0-rc.2 and 0.2.1-rc.2, the `compaction/prune`
+  shadow-price contract the plugin writes is unchanged, and the settings-card contract (`configForms.get`,
+  `configForms.whileServed`, the `plugins.row.config` slot, the `Config` schema) is unchanged. Verified by
+  running the full test suite against 0.2.1-rc.2 (177/177) and by booting an isolated dsh 0.2.1-rc.2 instance
+  with this plugin mounted: both rows load and run, and both `Configure` controls render with their forms.
+  The `peerDependencies` ranges are deliberately unchanged — `>=0.1.2-rc.1` already admits 0.2.1-rc.2, and the
+  plugin does not import `@deepseek-ai/dsh-scope`, the peer that 0.2.1 added to `dsh-session`.
+
 ## [0.6.7] - 2026-10-06
 
 ### Added
