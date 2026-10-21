@@ -178,6 +178,84 @@ Design consequences:
   is idle, so it cannot interleave with a turn, `/compact`, or automatic compaction; it also refuses while an unmatched
   `compaction/start` is open.
 
+## Tokenizer calibration
+
+DSH's token meter prices content at a fixed **four characters per token**. A real session is denser than that, so the
+meter **under-counts** the request it is about to send. On a production session the gap was measured at **1.16×–1.32×**
+per route (median 1.18, p90 1.28) — enough that a request the meter calls *12 000 tokens* can be **15 800** on the wire,
+past a 15 000-token window.
+
+The plugin now **learns** the gap instead of assuming it, and works in the provider's unit throughout.
+
+### How the factor is learned
+
+Every `assistant/message` that carries `usage` is one request the provider has already priced:
+
+```
+realPrompt  = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+estPrompt   = the surface as it stood before that message  +  the envelope's tool schemas
+factor      = realPrompt / estPrompt
+```
+
+The assistant message itself is excluded: it was the *answer*, not part of the request that produced it. The cache fields
+are included because dsh keeps them disjoint (`inputTokens` is the uncached part).
+
+Samples are kept per **`provider:model`** route, in a window of the last **50**. The route's factor is the **p90** of its
+samples, never the mean: a single log-heavy request must not move the factor, but a run of them should. The factor is
+**never below 1.0** — a meter that over-counts is not a reason to discard context.
+
+A route needs **3 samples** before its factor is believed. Below that, and for every route never seen, the factor is 1 and
+the plugin behaves exactly as it did before.
+
+### Where it is applied
+
+The factor converts the meter's per-node prices, so the planner compares one unit against another:
+
+| Where | Before | After |
+|---|---|---|
+| `/trim`'s budget check | the estimate | the real size |
+| `/trim`'s "already within budget" | the estimate | the real size |
+| the automatic trim's ladder | the estimate of the failing request | the real size of the failing request |
+| the trim's own report | the estimate | the real size |
+
+The request **envelope** is priced on its own terms — the tool schemas' own price — rather than as the difference between
+the meter's total and its surface. That difference only equals the envelope while the meter estimates everything; once the
+meter has adopted the provider's real usage as its baseline, the difference is the gap between the real and the estimated
+surface, and charging it as the envelope would inflate the very request the trim is trying to fit.
+
+### What it changes, concretely
+
+The same session, the same window, before and after the factor was learned (measured on an isolated dsh 0.2.0-rc.2 with a
+mock provider whose tokenizer is twice as dense as dsh's assumption):
+
+```
+/trim  →  Already within budget: ~6791 / 11527 tokens for mock:mock-model (window 21000). Nothing to trim.
+```
+
+```
+/trim  →  Cannot free enough for mock:mock-model (window 21000): the largest balanced span frees ~0 of the ~2408
+           tokens needed. Protected content: task statement ~3044 tokens, recent tail ~3354 tokens …
+```
+
+The first line is the meter talking (6791 estimated tokens, which fit). The second is the provider talking (13 896 real
+tokens, which did not). The uncalibrated plugin would have left the request alone and the backend would have refused it.
+
+### Where the table lives
+
+`<profile>/context-trim-calibration.json`, beside the profile patch. It holds the **raw observations**, not a factor: the
+policy that turns samples into a factor can change without invalidating what was measured. A missing or corrupt file is
+ignored — a factor the plugin never measured must not be believed.
+
+Delete the file to forget everything and start over; a fresh profile starts empty and behaves exactly as it did before
+calibration existed.
+
+### What it does not do
+
+- **The compaction threshold is untouched.** A static threshold cannot be simultaneously right for the anchored and the
+  unanchored case: dividing it by the factor would make compaction fire ~20 % early in the common case, where dsh's own
+  meter has already adopted the provider's real usage. The calibrated trim ladder is the backstop for the unanchored case.
+- **It does not change the context window.** The factor corrects how the request is *counted*, not how large the window is.
+
 ## Automatic trimming on the context wall
 
 `autoTrim` (default on) makes the same model-free reduction happen without anyone typing a command: a **prepended**
@@ -489,8 +567,10 @@ Failure bounds:
   budget, `/trim` says so instead of pretending.
 - **Nothing is restored.** There is no `/untrim` in v1: re-inserting earlier content as surface nodes would need
   `assistant`/`tool` events, which are only legal inside an open turn.
-- **Heuristic pricing.** Budgets use the token meter's own estimate — the same numbers `/compact` and the GUI context bar
-  use. Provider-reported usage drifts slightly from it.
+- **Heuristic pricing, calibrated against the provider.** Budgets use the token meter's own estimate — the same numbers
+  `/compact` and the GUI context bar use — corrected by the factor the plugin has learned for that route (see
+  [Tokenizer calibration](#tokenizer-calibration)). Before a route has been measured, the numbers are the meter's estimate
+  and can understate the real request by ~20 %.
 
 ## Tuning compaction's threshold (`/context-tune preset`)
 
@@ -741,6 +821,11 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | npm release via GitHub Actions | ✅ 0.1.0 published with provenance (`+ dsh-command-context-trim@0.1.0`) |
 | Isolated profile install **from the npm registry** (dependency + bundle layer + composed insert row) | ✅ 0.1.0 |
 | End-to-end in a real 0.1.7 boot (isolated home, mock backend): a request REFUSED at 10,664 tokens came back ACCEPTED at 7,230 after the automatic trim, with `compaction/start` = 0 | ✅ verified |
+| **Tokenizer calibration, measured on a production session** (2 805 requests, 5 routes, replayed through the token meter's own fold): the provider/meter ratio per route | ✅ 1.013–1.324, per-route medians 1.16–1.32 |
+| **Calibration unit tests**: p90-not-mean, the floor at 1.0, the 3-sample bootstrap, the sample window, the route key, the envelope price, a corrupt snapshot ignored | ✅ 17 tests |
+| **Calibration integration against the real `dsh-token-meter`**: a session whose real prompt is over the window is trimmed where the uncalibrated planner reports a fit; the learned factor recovers the density the provider charged (2.400 ± 0.05); the table survives a restart; the repeat-overflow ceiling is derived from the real failing size | ✅ 6 tests |
+| **Calibration end to end in an isolated dsh 0.2.0-rc.2** (own `DSH_HOME`, port 3091, mock provider whose tokenizer is twice as dense as dsh's assumption): the factor is learned from the provider's `usage` and persisted to `<profile>/context-trim-calibration.json` | ✅ learned 2.015–2.052 against a mock density of 2.0 |
+| Same instance, the decisive A/B — the same session and the same window, with and without the learned factor | ✅ uncalibrated: "Already within budget: ~6791 / 11527 … Nothing to trim"; calibrated: "frees ~0 of the ~2408 tokens needed" (13 896 real tokens, 6 791 estimated) |
 
 ## License
 
@@ -837,3 +922,24 @@ delegates to dsh's pruner service, so this one value governs both paths; when th
 `autoTrim: true` retries a failed request by shrinking its budget:
 `nextCeiling = max(1, floor(failingTotal × (1 − autoTrimShrink)))` with `autoTrimShrink: 0.5` and at most
 `maxAutoTrimRetries: 3` attempts before it gives up and reports what it measured.
+
+`failingTotal` is the **real** size of the request that was just rejected — the meter's estimate corrected by the route's
+calibration factor. A ceiling derived from the estimate would be a ceiling on a number the backend never saw, and the
+ladder would keep aiming at a target that is still over the real window.
+
+### 7. The calibration factor
+
+```
+realPrompt = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+estPrompt  = surface before the assistant message  +  estimateEnvelopeTokens(header)
+factor     = clamp(p90(samples of realPrompt / estPrompt), ≥ 1.0)      # per provider:model route
+```
+
+- **Samples**: one per completed request, kept in a window of the last 50, per route.
+- **Minimum**: 3 samples, otherwise the factor is 1.
+- **p90, not the mean**: a run of log-heavy requests moves the factor; a single one does not.
+- **Never below 1.0**: over-counting is not a reason to discard context.
+- **The envelope** is the tool schemas' own price: `ceil(JSON.stringify(header.tools).length / 4) + 4`.
+
+The factor multiplies the meter's per-node prices, so the planner's `need` (real) and `freedTokens` (real) are one unit,
+and the request total the plugin reports is the request's real size.

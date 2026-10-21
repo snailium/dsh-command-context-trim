@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { toolPairingBalancedAfter } from '@deepseek-ai/dsh-compaction';
 import { createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm';
-import { Session, deriveEventMessage } from '@deepseek-ai/dsh-session';
+import { Session, canonicalHeader, deriveEventMessage } from '@deepseek-ai/dsh-session';
 import { apply as applyPlugin } from '../lib/index.js';
 
 /** Heuristic price of one surface node, standing in for the token meter's own /4 estimate. */
@@ -185,17 +185,20 @@ test('a second trim with the same budget reports a fit', async () => {
 });
 
 test('refuses when the fixed request envelope alone exceeds the budget', async () => {
-	const envelope = 20000;
-	const { commands } = stubContext({
-		tokenMeter: {
-			measure(session) {
-				const priced = stubMeter().measure(session);
-				return { ...priced, totalTokens: priced.surfaceTokens + envelope };
-			},
-			estimateMessage: priceMessage
-		}
-	});
+	const { commands } = stubContext();
 	const session = buildSession(1);
+	// The fixed overhead of a request is its envelope: the mounted tool schemas. A fat
+	// schema is the one way to make the envelope alone larger than the budget.
+	session.append(
+		'request/header',
+		{
+			header: canonicalHeader({
+				config: { provider: 'p', model: 'm' },
+				tools: [{ name: 'fat', description: 'x'.repeat(80_000), parameters: { type: 'object', properties: {} } }]
+			}),
+			reason: 'initial'
+		}
+	);
 	const result = await invoke(commands.get('trim').handler, stubAgent(session), '8000');
 	assert.equal(result.kind, 'error');
 	assert.match(result.text, /Fixed request overhead alone/);

@@ -5,6 +5,50 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Tokenizer calibration: the plugin now works in the provider's real token counts.** DSH's token meter prices
+  content at a fixed four characters per token, so it under-counts a real session. Measured on a production session
+  (2 805 requests, 5 routes) the gap is **1.16×–1.32×** per route (median 1.18, p90 1.28) — enough for a request the
+  meter calls 12 000 tokens to be 15 800 on the wire, past a 15 000-token window.
+
+  Every `assistant/message` carrying `usage` is one request the provider has already priced, so it is one observation:
+  `factor = (inputTokens + cacheReadTokens + cacheWriteTokens) / (the surface before that message + the envelope's
+  tool schemas)`. Samples are kept per `provider:model` route in a window of the last 50; the route's factor is their
+  **p90** (never the mean), never below 1.0, and only believed after **3 samples**. A route never seen behaves exactly
+  as it did before.
+
+  The factor is applied to the meter's per-node prices, so the planner's `need` and `freedTokens` are one unit and the
+  request total the plugin reports is the request's real size. It reaches the `/trim` budget check, the "already within
+  budget" verdict, the automatic trim's retry ladder, and the trim's own report.
+
+  The request **envelope** is now priced on its own terms (the tool schemas' price) instead of as the difference between
+  the meter's total and its surface. That difference only equals the envelope while the meter estimates everything; once
+  the meter has adopted the provider's real usage as its baseline, charging it as the envelope inflated the very request
+  the trim was trying to fit.
+
+  The learned table is stored in `<profile>/context-trim-calibration.json` as **raw observations**, not a factor, so the
+  policy that turns samples into a factor can change without invalidating what was measured. A missing or corrupt file is
+  ignored.
+
+  **Deliberately not changed:** the compaction threshold. A static threshold cannot be simultaneously right for the
+  anchored and the unanchored case — dividing it by the factor would make compaction fire ~20 % early in the common case,
+  where dsh's own meter has already adopted the provider's real usage. The calibrated trim ladder is the backstop for the
+  unanchored case.
+
+  Verified with 24 new tests (unit plus integration against the **real** `dsh-token-meter`), and end to end in an
+  isolated dsh 0.2.0-rc.2 against a mock provider whose tokenizer is twice as dense as dsh's assumption. The same session
+  and the same window, before and after the factor was learned:
+
+  ```
+  /trim  →  Already within budget: ~6791 / 11527 tokens for mock:mock-model (window 21000). Nothing to trim.
+  /trim  →  Cannot free enough for mock:mock-model (window 21000): the largest balanced span frees ~0 of the ~2408
+             tokens needed. Protected content: task statement ~3044 tokens, recent tail ~3354 tokens …
+  ```
+
+  The first line is the meter talking (6 791 estimated tokens, which fit); the second is the provider talking
+  (13 896 real tokens, which did not).
+
 ### Changed
 
 - **dsh 0.2.1-rc.2 is verified and declared compatible.** The `dsh.compatibility.dshReleases` map now lists

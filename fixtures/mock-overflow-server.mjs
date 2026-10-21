@@ -18,7 +18,7 @@
  *   request >L   : 400 with llama.cpp-style overflow wording
  *   after trim   : the request fits again → final text, turn completes
  *
- * Env: PORT, TOKEN_LIMIT, TOOL_STEPS, FILLER_CHARS
+ * Env: PORT, TOKEN_LIMIT, TOOL_STEPS, FILLER_CHARS, CHARS_PER_TOKEN
  */
 import { createServer } from 'node:http';
 
@@ -26,6 +26,12 @@ const PORT = Number(process.env.PORT ?? 4185);
 const TOKEN_LIMIT = Number(process.env.TOKEN_LIMIT ?? 12000);
 const TOOL_STEPS = Number(process.env.TOOL_STEPS ?? 4);
 const FILLER_CHARS = Number(process.env.FILLER_CHARS ?? 48000);
+// The density of the mock's tokenizer, in characters per token. dsh's token meter assumes
+// four, so the default keeps the mock and dsh in agreement. A value BELOW four makes the
+// mock count MORE tokens than dsh expects — the situation the tokenizer calibration
+// exists to learn. The limit and the reported usage are both counted this way, so the
+// mock behaves like a real backend whose tokenizer is denser than dsh's assumption.
+const CHARS_PER_TOKEN = Number(process.env.CHARS_PER_TOKEN ?? 4);
 // Command the mock asks the agent's bash tool to run. Point it at something with a
 // large output (e.g. `seq 1 40000`) to produce a single oversized TOOL RESULT
 // instead of a large assistant message.
@@ -42,7 +48,7 @@ function estimateTokens(body) {
 		if (typeof message.content === 'string') chars += message.content.length;
 		else chars += JSON.stringify(message.content ?? '').length;
 	}
-	return Math.ceil(chars / 4);
+	return Math.ceil(chars / CHARS_PER_TOKEN);
 }
 
 let accepted = 0;

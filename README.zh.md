@@ -2,7 +2,7 @@
 
 [English →](README.md)
 
-<!-- synced-with-readme: 0.6.7 -->
+<!-- synced-with-readme: 0.7.0 -->
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加一个**不调用任何模型**的 `/trim`：
 在真正溢出之前，把对话里最旧、最不重要的一段上下文裁掉，让会话能切到**窗口更小的模型**上继续跑；同时可以按路由
@@ -112,6 +112,78 @@ coverage: 4 route(s) configured, 3 covered by this preset, 1 not covered.
 再写入 token meter 的测量事件；两者之间没有 await，所以模型不会看到中间态。裁剪按**从最旧开始**的优先级进行，
 最后一条消息降级为"尽量不裁"，用户指令始终受保护。
 
+## 分词器校准
+
+DSH 的 token meter 按固定 **4 字符/token** 计价。真实会话比这个更密，所以 meter **少算**了即将发出的请求。
+在一个真实会话上实测，各路线的差距是 **1.16×–1.32×**（中位 1.18，p90 1.28）——足以让 meter 认为是 12 000 token 的请求，
+在服务端其实是 15 800，已经越过 15 000 的窗口。
+
+插件现在**自己学出**这个差距，并在整个流程里用服务端的单位工作。
+
+### 因子是怎么学出来的
+
+每一条带 `usage` 的 `assistant/message`，都是一次服务端已经计过价的请求：
+
+```
+realPrompt  = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+estPrompt   = 该消息之前的请求面  +  封装（工具 schema）的价格
+factor      = realPrompt / estPrompt
+```
+
+那条 assistant 消息本身要排除：它是**回答**，不是产生它的那次请求的一部分。缓存字段要算进去，因为 dsh 把它们分开记
+（`inputTokens` 是未命中缓存的部分）。
+
+样本按 **`provider:model`** 路线分开保存，保留最近 **50** 条。某条路线的因子取这些样本的 **p90**，不是均值：
+一次日志很重的请求不该改变因子，但一串这样的请求应该。因子**永远不低于 1.0**——meter 算多了，不是丢上下文的理由。
+
+一条路线要积累 **3 个样本**才采信它的因子。在那之前、以及对所有没见过的路线，因子都是 1，插件的行为和加校准之前
+完全一样。
+
+### 用在哪里
+
+因子把 meter 给每个节点定的价换算一遍，于是规划器比较的是同一个单位：
+
+| 位置 | 之前 | 之后 |
+|---|---|---|
+| `/trim` 的预算判断 | 估算值 | 真实大小 |
+| `/trim` 的"已在预算内" | 估算值 | 真实大小 |
+| 自动裁剪的梯度 | 失败请求的估算值 | 失败请求的真实大小 |
+| `/trim` 的汇报 | 估算值 | 真实大小 |
+
+请求的**封装**单独计价——就是工具 schema 自己的价格——而不是拿 meter 的总量减去请求面当封装。只有在 meter 全部用估算
+的时候，这个差值才等于封装；一旦 meter 采用了服务端的真实用量当基准，这个差值就是"真实"与"估算"之间的差，把它当封装
+会反过来把本次要裁剪的请求**撑大**。
+
+### 实际改变了什么
+
+同一个会话、同一个窗口，在学到因子之前和之后的实际输出（隔离的 dsh 0.2.0-rc.2，接一个分词密度是 dsh 假设值两倍的
+mock 服务端）：
+
+```
+/trim  →  Already within budget: ~6791 / 11527 tokens for mock:mock-model (window 21000). Nothing to trim.
+```
+
+```
+/trim  →  Cannot free enough for mock:mock-model (window 21000): the largest balanced span frees ~0 of the ~2408
+           tokens needed. Protected content: task statement ~3044 tokens, recent tail ~3354 tokens …
+```
+
+第一行是 meter 在说话（估算 6791，装得下），第二行是服务端在说话（真实 13 896，装不下）。没校准时插件会认为不用裁，
+然后被服务端拒掉。
+
+### 表存在哪
+
+`<profile>/context-trim-calibration.json`，和 profile patch 放在一起。文件里存的是**原始观测值**，不是因子：
+把样本变成因子的策略可以改，而不必作废已经测到的东西。文件缺失或损坏都会被忽略——插件没测过的因子不能采信。
+
+删掉这个文件就是全部忘掉、从头再来；全新 profile 本来就是空的，行为和加校准之前完全一致。
+
+### 它不做什么
+
+- **不动压缩的触发阈值。** 一个静态阈值不可能同时对"已对齐"和"未对齐"两种情况都正确：把它除以因子，会让压缩在
+  最常见的那种情况（dsh 自己的 meter 已经采用了服务端真实用量）下提前约 20% 触发。未对齐的情况由校准后的裁剪梯度兜底。
+- **不改上下文窗口大小。** 因子纠正的是请求**怎么被计数**，不是窗口**有多大**。
+
 ## 上下文墙上的自动裁剪
 
 `autoTrim`（默认开启）让同样的免模型裁剪在无人敲命令时发生：一个 **prepend** 的 `agent/request-error` 监听器
@@ -205,6 +277,8 @@ Plugins 页面上的卡片显示的是**生效值，而不是"是否覆盖"**：
 
 - 只写**两条**会话事件（替换消息 + 测量），不调用模型；
 - 读取 profile 补丁、会话记录与 token meter；
+- 读取服务端回报的 `usage` 以校准分词密度，并把学到的表写到
+  `<profile>/context-trim-calibration.json`（原子写；缺失或损坏时忽略）；
 - `/context-tune preset` 与 `/context-tune rescue` 会写 **profile 补丁**（写前备份为 `<patch>.bak-trim-preset`）；
 - 自动路径只在 profile 平面可达时写入；不可达时只**报告**，不静默失败。
 
@@ -290,9 +364,13 @@ npm run build:client
 
 ### 验证状态
 
-见英文 `README.md` 的 *Verification status* 表（149 个测试、隔离实例验证、0.3.9–0.4.4 的各项证据，以及 Bonsai 2
+见英文 `README.md` 的 *Verification status* 表（200 个测试、隔离实例验证、0.3.9–0.4.4 的各项证据，以及 Bonsai 2
 headless 的前后对比：`thresholdChars: 32768`、`compaction/prune` **17 → 2**）。中文版不重复该表以免两处漂移；
 `test/docs-sync.test.js` 会检查本节仍然指向它。
+
+分词器校准这一项的证据也在那张表里：生产会话上实测的各路线系数（1.013–1.324）、17 个单元测试、6 个跑在**真实**
+`dsh-token-meter` 上的集成测试，以及隔离 dsh 0.2.0-rc.2 里对 mock 服务端（分词密度是 dsh 假设值两倍）的端到端验证——
+同一个会话、同一个窗口，学到因子前后 `/trim` 给出的是相反的判断。
 
 ## 许可证
 
@@ -361,3 +439,23 @@ prunerThresholdChars = max(8192, min(32768, 2 × (contextWindow − maxTokens)))
 `autoTrim: true` 通过缩小预算来重试失败的请求：
 `nextCeiling = max(1, floor(failingTotal × (1 − autoTrimShrink)))`，`autoTrimShrink: 0.5`，最多
 `maxAutoTrimRetries: 3` 次，之后放弃并报告它测到的东西。
+
+`failingTotal` 是**刚刚被拒那次请求的真实大小**——meter 的估算值乘上该路线的校准因子。若拿估算值算上限，
+得到的就是一个服务端根本没见过的数字，梯度会一直瞄准一个仍然超出真实窗口的目标。
+
+### 7. 校准因子
+
+```
+realPrompt = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+estPrompt  = 该 assistant 消息之前的请求面  +  estimateEnvelopeTokens(header)
+factor     = clamp(p90(各次 realPrompt / estPrompt 的样本), ≥ 1.0)      # 按 provider:model 路线
+```
+
+- **样本**：每次完成的请求一条，按路线各留最近 50 条。
+- **门槛**：3 个样本，否则因子为 1。
+- **p90，不是均值**：一串日志很重的请求会推动因子，单个不会。
+- **永远不低于 1.0**：算多了不是丢上下文的理由。
+- **封装**是工具 schema 自己的价格：`ceil(JSON.stringify(header.tools).length / 4) + 4`。
+
+因子乘在 meter 给每个节点定的价上，于是规划器的 `need`（真实）与 `freedTokens`（真实）是同一个单位，
+插件汇报的请求总量就是请求的真实大小。
