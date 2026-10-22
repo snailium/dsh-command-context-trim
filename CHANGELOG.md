@@ -5,6 +5,25 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-21
+
+### Fixed
+
+- **A request the token meter has already priced is no longer under-reported.** 0.7.0 priced the request from the
+  meter's per-node estimates times the learned factor, and dropped the meter's own total once the meter had adopted
+  the provider's usage as its baseline. On a route with no learned samples that under-counted a real request by up to
+  12 %. Measured on a production session: the meter said 251 345 tokens, 0.7.0 priced the same request at 222 073,
+  and the provider charged 251 732 — a request that no longer fits the window was reported as fitting it.
+
+  The density is now the larger of the learned factor and the one the meter itself implies for that request. The
+  meter's total is in real tokens while its node prices stay heuristic, and the ratio between the two is a
+  measurement of the very request being priced. The ratio is taken at the meter's anchor — the request the provider
+  counted — so it does not drift when a trim changes the surface, and it is never below 1, because the meter only
+  adopts a usage that is at least its own estimate. The same production request is now priced at 251 556 tokens,
+  0.1 % from what the provider charged, and a session the meter still estimates is priced exactly as before.
+
+## [0.7.0] - 2026-10-21
+
 ### Added
 
 - **Tokenizer calibration: the plugin now works in the provider's real token counts.** DSH's token meter prices

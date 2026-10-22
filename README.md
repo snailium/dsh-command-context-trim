@@ -207,6 +207,12 @@ samples, never the mean: a single log-heavy request must not move the factor, bu
 A route needs **3 samples** before its factor is believed. Below that, and for every route never seen, the factor is 1 and
 the plugin behaves exactly as it did before.
 
+A route without a learned factor is not left to the meter's estimate alone. Once the meter has adopted the provider's
+own usage as its baseline, its total is in real tokens while its per-node prices stay heuristic, and the ratio between
+the two is a density measured on the very request being priced. The plugin uses the **larger** of the learned factor and
+that implied one, so a request the provider has already counted is never priced below what the provider charged for it
+— and a route that was just switched to is still priced from the last request the provider actually answered.
+
 ### Where it is applied
 
 The factor converts the meter's per-node prices, so the planner compares one unit against another:
@@ -823,7 +829,7 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | End-to-end in a real 0.1.7 boot (isolated home, mock backend): a request REFUSED at 10,664 tokens came back ACCEPTED at 7,230 after the automatic trim, with `compaction/start` = 0 | ✅ verified |
 | **Tokenizer calibration, measured on a production session** (2 805 requests, 5 routes, replayed through the token meter's own fold): the provider/meter ratio per route | ✅ 1.013–1.324, per-route medians 1.16–1.32 |
 | **Calibration unit tests**: p90-not-mean, the floor at 1.0, the 3-sample bootstrap, the sample window, the route key, the envelope price, a corrupt snapshot ignored | ✅ 17 tests |
-| **Calibration integration against the real `dsh-token-meter`**: a session whose real prompt is over the window is trimmed where the uncalibrated planner reports a fit; the learned factor recovers the density the provider charged (2.400 ± 0.05); the table survives a restart; the repeat-overflow ceiling is derived from the real failing size | ✅ 6 tests |
+| **Calibration integration against the real `dsh-token-meter`**: a session whose real prompt is over the window is trimmed where the uncalibrated planner reports a fit; an anchored request is never priced below what the provider already charged; the learned factor recovers the density the provider charged (2.400 ± 0.05); the table survives a restart; the repeat-overflow ceiling is derived from the real failing size | ✅ 7 tests |
 | **Calibration end to end in an isolated dsh 0.2.0-rc.2** (own `DSH_HOME`, port 3091, mock provider whose tokenizer is twice as dense as dsh's assumption): the factor is learned from the provider's `usage` and persisted to `<profile>/context-trim-calibration.json` | ✅ learned 2.015–2.052 against a mock density of 2.0 |
 | Same instance, the decisive A/B — the same session and the same window, with and without the learned factor | ✅ uncalibrated: "Already within budget: ~6791 / 11527 … Nothing to trim"; calibrated: "frees ~0 of the ~2408 tokens needed" (13 896 real tokens, 6 791 estimated) |
 

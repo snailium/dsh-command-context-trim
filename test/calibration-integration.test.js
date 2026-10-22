@@ -22,10 +22,10 @@ import { createAssistantMessage, createToolResultMessage, createUserMessage } fr
 import { Session, canonicalHeader } from '@deepseek-ai/dsh-session';
 import TokenMeter from '@deepseek-ai/dsh-token-meter';
 import { apply as applyPlugin } from '../lib/index.js';
-import { currentCalibration, knownRoutes, saveCalibration } from '../lib/calibrate-runtime.js';
+import { currentCalibration, factorForRoute, knownRoutes, saveCalibration } from '../lib/calibrate-runtime.js';
 import { factorFromSamples } from '../lib/calibration.js';
 import { resolveConfig } from '../lib/config.js';
-import { calibratedRequestTotal, executeTrim } from '../lib/trim-session.js';
+import { calibratedRequestTotal, executeTrim, requestPricer } from '../lib/trim-session.js';
 
 /** A scratch directory under the repository, so nothing is written to /tmp. */
 const tmpRoot = async () => {
@@ -203,6 +203,32 @@ test('a session whose real prompt is over the window is trimmed, not reported as
 	assert.equal(result.kind, 'success', result.text);
 	assert.doesNotMatch(result.text, /Nothing to trim/);
 	assert.match(result.text, /Trimmed/);
+});
+
+test('an anchored request is never priced below what the provider already charged', async () => {
+	const { meter } = meterFor();
+	const { ctx, listeners } = pluginContextFor(meter);
+	const session = buildSession({ pairs: 8, requests: 0, density: 2.4 });
+	// One completed request is enough for the meter to adopt the provider's own count.
+	completeRequest(session, listeners, meter, 2.4);
+
+	const measurement = meter.measure(session);
+	assert.equal(measurement.baseline.kind, 'usage', 'the meter must have adopted the provider real usage');
+	// One observation is not enough to learn a factor from, so this route is uncalibrated.
+	assert.equal(factorForRoute(ctx, 'p:m'), 1, 'no factor may be learned from one observation');
+
+	// The meter knows the real size of this request; the trim must not price it lower,
+	// or the request that no longer fits the window would be reported as fitting it.
+	const pricer = requestPricer(ctx, session, session.requestHeader());
+	const view = pricer.view(measurement);
+	assert.ok(
+		view.totalTokens >= measurement.totalTokens,
+		`the priced request must not fall below the meter's real total: ${String(view.totalTokens)} < ${String(measurement.totalTokens)}`
+	);
+	assert.ok(
+		view.totalTokens >= measurement.surfaceTokens,
+		'the priced request must include the envelope, not just the surface'
+	);
 });
 
 test('a fresh route with no observations is trimmed exactly as it was before', async () => {
