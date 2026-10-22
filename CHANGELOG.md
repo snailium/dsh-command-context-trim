@@ -5,6 +5,21 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-22
+
+### Fixed
+
+- **The truncation hint reads its configuration inside its own guard.** A configuration that cannot be resolved — a
+  card edit that left a field inconsistent — made the hint's event listener throw instead of logging a warning, and
+  an exception thrown from a session listener is not the plugin's to swallow quietly. The read now happens inside the
+  same guard as the rest of the hint, so a broken configuration costs one warning line and nothing else.
+
+- **The hint's test no longer depends on the harness line.** The finish chunk the test needs (`max-tokens` /
+  `length`) is a shape the older harness lines do not know, and the token meter folds every event's provider stream
+  through the harness's own stream assembler: the test failed on 0.1.5-rc.3 while the plugin itself was fine. The
+  test now drives a stub meter, which is what it was testing anyway — the hint's logic, not the price. The real
+  meter stays covered by the calibration integration tests.
+
 ## [0.7.2] - 2026-10-21
 
 ### Fixed

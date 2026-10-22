@@ -12,18 +12,34 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Context } from '@deepseek-ai/cordis';
 import { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm';
 import { Session, canonicalHeader } from '@deepseek-ai/dsh-session';
-import TokenMeter from '@deepseek-ai/dsh-token-meter';
 import { apply as applyPlugin } from '../lib/index.js';
 import { stopReasonOf } from '../lib/truncation-hint.js';
 
-/** The real meter, on a context that swallows the session projections. */
-function meterFor() {
-	const ctx = new Context();
-	ctx.sessionProjections = { register: () => () => undefined };
-	return { ctx, meter: new TokenMeter(ctx, {}) };
+/**
+ * A stand-in for the token meter.
+ *
+ * The hint reads the request's size through the meter, and this test is about the
+ * hint's logic, not the price. A stub also keeps the test independent of the
+ * harness line: the meter folds every event's provider stream, and the finish
+ * chunk this test needs (`max-tokens` / `length`) is a shape the older harness
+ * lines do not know.
+ *
+ * @param surfaceTokens - the surface size the stub reports.
+ * @returns a meter object with the meter's measure contract.
+ */
+function meterFor(surfaceTokens) {
+	return {
+		measure: () => ({
+			logRevision: 0,
+			baseline: { kind: 'estimated', tokens: 0 },
+			surfaceDeltaTokens: 0,
+			totalTokens: surfaceTokens,
+			surfaceTokens,
+			nodes: [{ seq: 1, heuristicTokens: surfaceTokens }]
+		})
+	};
 }
 
 /** A plugin context that keeps the listeners, so events can be delivered the way the harness delivers them. */
@@ -132,9 +148,7 @@ test('the stop reason is read from the finish chunk, in both shapes', () => {
 });
 
 test('a cut reply over the budget is reported with the request size and the window, and nothing is trimmed', () => {
-	const { meter } = meterFor();
-	const { listeners, warnings } = pluginContextFor(meter);
-	// A body that puts the request over the 206438-token budget of this route.
+	const { listeners, warnings } = pluginContextFor(meterFor(225000));
 	const session = buildSession({ bodyChars: 900000 });
 
 	const event = reply(session);
@@ -156,8 +170,7 @@ test('a cut reply over the budget is reported with the request size and the wind
 });
 
 test('a cut reply within the budget says the context is not what stopped it', () => {
-	const { meter } = meterFor();
-	const { listeners } = pluginContextFor(meter);
+	const { listeners } = pluginContextFor(meterFor(10020));
 	const session = buildSession({ bodyChars: 40000 });
 	const event = reply(session);
 	publish(listeners, session, event);
@@ -170,8 +183,7 @@ test('a cut reply within the budget says the context is not what stopped it', ()
 });
 
 test('a reply that ended normally produces no hint', () => {
-	const { meter } = meterFor();
-	const { listeners } = pluginContextFor(meter);
+	const { listeners } = pluginContextFor(meterFor(10020));
 	const session = buildSession();
 	const event = reply(session, { reason: 'stop', stopReason: 'stop' });
 	publish(listeners, session, event);
@@ -179,8 +191,7 @@ test('a reply that ended normally produces no hint', () => {
 });
 
 test('one hint per episode: a normal reply clears it', () => {
-	const { meter } = meterFor();
-	const { listeners } = pluginContextFor(meter);
+	const { listeners } = pluginContextFor(meterFor(10020));
 	const session = buildSession();
 
 	const first = reply(session);
