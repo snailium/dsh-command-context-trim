@@ -2,7 +2,7 @@
 
 [English →](README.md)
 
-<!-- synced-with-readme: 0.7.1 -->
+<!-- synced-with-readme: 0.7.2 -->
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加一个**不调用任何模型**的 `/trim`：
 在真正溢出之前，把对话里最旧、最不重要的一段上下文裁掉，让会话能切到**窗口更小的模型**上继续跑；同时可以按路由
@@ -200,6 +200,30 @@ mock 服务端）：
   → 仍失败⇒交给 DSH 自己的压缩路径
 ```
 
+## 服务端把回答截断时
+
+回答以 length 结束**不是错误**：请求成功了，是服务端停止了生成。自动裁剪只认 `CONTEXT_WINDOW_EXCEEDED`，
+看不到这种情况，用户只会得到一轮莫名其妙少了一半的回答。
+
+所以插件**只提示，不自动裁**。当一条 assistant 消息的 finish 块报 `max-tokens` 时，它往会话里写一行：
+
+```
+[context-trim] the provider cut the previous reply short (a length stop). The request carried ~251732 tokens of a
+262144-token window, over the 206438-token budget. It was allowed 32768 tokens of output and produced 1. Run /trim to
+shrink the context.
+```
+
+关键在两个数字，因为 length 截断有两种完全不同的原因：
+
+| 请求本身 | 是什么停了回答 | 提示怎么说 |
+|---|---|---|
+| 超出预算 | 大概率是上下文 | 让你跑 `/trim` |
+| 在预算之内 | 服务端自己的输出上限 | 上下文不是原因，“继续”才是 |
+
+一次连招只提示一次：服务端既然截了一次，同一段里的下一条回答多半同样被截，每条都提示会把对话淹掉；
+一条正常结束的回答会结束这一轮。同一行内容也会以 `warn` 级别写进宿主日志——对用户上下文的这种旁观察，
+也必须在那里看得见。
+
 ## 受保护的内容
 
 用户指令（最后一条消息）**尽量不裁**；`protectHeadNodes`（默认 1）保护开头的节点；保留尾部（`retainRatio` /
@@ -256,8 +280,8 @@ Plugins 页面上的卡片显示的是**生效值，而不是"是否覆盖"**：
 
 | 键 | 默认值 | 含义 |
 |---|---|---|
-| `targetRatio` | `0.9` | `budget = floor((contextWindow - reserveOutputTokens) * targetRatio)` |
-| `reserveOutputTokens` | `8192` | 留给模型自己回复的输出空间。它与服务端自己的 `maxTokens` 之和要落在真实窗口内：一个 32k 的服务若 `maxTokens: 16384`，即使提示词都装得下，提示词 + 输出也会耗尽窗口 |
+| `targetRatio` | `0.9` | `budget = floor((contextWindow - reserve) * targetRatio)`，其中 `reserve = max(reserveOutputTokens, 路线自己声明的输出额度)` |
+| `reserveOutputTokens` | `8192` | 留给模型自己回复的输出空间。这只是**下限**：路线自己的输出额度（请求里的 `maxTokens`，或适配器的 `defaultMaxTokens`）会在它之上被全额预留，因为服务端会拒绝“提示词 + 额度”超出窗口的请求：一个 32k 的服务若 `maxTokens: 16384`，即使提示词都装得下，提示词 + 输出也会耗尽窗口 |
 | `retainRatio` / `retainTokens` | `0.16` /—| 逐字保留的最近尾部（两种形式互斥）|
 | `minTailTokens` | `2048` | 该尾部的绝对下限 |
 | `protectHeadNodes` | `1` | 永不裁剪的开头节点数 |
@@ -373,9 +397,12 @@ npm run build:client
 headless 的前后对比：`thresholdChars: 32768`、`compaction/prune` **17 → 2**）。中文版不重复该表以免两处漂移；
 `test/docs-sync.test.js` 会检查本节仍然指向它。
 
-分词器校准这一项的证据也在那张表里：生产会话上实测的各路线系数（1.013–1.324）、17 个单元测试、7 个跑在**真实**
+分词器校准这一项的证据也在那张表里：生产会话上实测的各路线系数（1.013–1.324）、17 个单元测试、8 个跑在**真实**
 `dsh-token-meter` 上的集成测试，以及隔离 dsh 0.2.0-rc.2 里对 mock 服务端（分词密度是 dsh 假设值两倍）的端到端验证——
 同一个会话、同一个窗口，学到因子前后 `/trim` 给出的是相反的判断。
+
+0.7.2 起还有两项新证据在表里：输出预留（预算会预留路线自己的输出额度，4 个测试）和截断提示（length 截断的成因
+分得清、只提示不裁剪，5 个测试）。
 
 ## 许可证
 
@@ -391,11 +418,17 @@ MIT
 ### 1. 裁剪预算（`/trim` 把请求面塞进多少）
 
 ```
-usable  = contextWindow − reserveOutputTokens          # reserveOutputTokens: 8192
-budget  = max(1, floor(usable × targetRatio))          # targetRatio: 0.9
-retain  = max(minTailTokens,                           # minTailTokens: 2048
+allowance = max(route.defaultMaxTokens,        # 路线自己声明的输出额度
+                the logged header's maxTokens) # 本次会话实际请求的额度
+reserve  = max(reserveOutputTokens, allowance) # reserveOutputTokens: 8192，是下限
+usable   = contextWindow − reserve
+budget   = max(1, floor(usable × targetRatio)) # targetRatio: 0.9
+retain   = max(minTailTokens,                           # minTailTokens: 2048
               floor(contextWindow × retainRatio))      # retainRatio: 0.16
 ```
+
+预留的是路线**全部**的输出额度，而不是猜出来的：请求加上它可能生成的输出必须装得进窗口，否则服务端直接拒绝
+（`context window exceeds limit`）；推理模型更是在写出正文之前就把这段额度花掉了。
 
 ### 2. 规划器在比较什么
 

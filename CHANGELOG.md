@@ -5,6 +5,44 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-21
+
+### Fixed
+
+- **The trim budget now reserves the route's own output allowance.** The budget was
+  `floor((contextWindow - reserveOutputTokens) * targetRatio)`, with a fixed 8 192-token reserve. A request has to fit
+  the window **together with** the output it is allowed to produce: a provider rejects a request whose prompt plus its
+  own output allowance exceeds the window (`context window exceeds limit`), and a reasoning model spends that
+  allowance before it writes anything. The 10 % the ratio leaves over happened to cover the allowance on some routes
+  and not on others, so the arithmetic was accidental rather than derived.
+
+  Measured against the production profile's own routes, four of twelve reserved less than their allowance:
+
+  | Route | Window | `maxTokens` | Budget before | Budget now |
+  |---|---|---|---|---|
+  | `ovms/qwen38` | 81 920 | 65 536 | 66 355 | 14 745 |
+  | `opencode-go/qwen3.8-flash` | 1 000 000 | 131 072 | 892 627 | 782 035 |
+  | `opencode-go/deepseek-v4-pro` | 1 000 000 | 384 000 | 892 627 | 554 400 |
+  | `opencode-go/deepseek-v4.1-flash` | 1 000 000 | 384 000 | 892 627 | 554 400 |
+
+  The route's allowance is now reserved in full — the request's own `maxTokens` when the logged header names the same
+  route, otherwise the adapter's `defaultMaxTokens` — and `reserveOutputTokens` keeps its meaning as the floor for a
+  route that declares none. The trim's report names the reserve it used. This is the same reserve DSH's own compaction
+  spec takes (`reservedCompletionTokens = the routed request's maxTokens`), so both sides of the plugin now size
+  themselves against the same number.
+
+### Added
+
+- **A hint when the provider cuts a reply short.** A reply that ends on a length stop is not an error: the request
+  succeeded, the provider stopped generating. The automatic trim listens for `CONTEXT_WINDOW_EXCEEDED`, so it never
+  sees this case, and the user was left with a turn that was silently missing its answer.
+
+  The plugin now writes one line into the session when it sees one — and it **only hints, it never trims**. The line
+  carries the two numbers that tell the causes apart: the request's real size and the window it had to fit in. A
+  request over the budget is told to run `/trim`; a request within it is told that the context is not what stopped the
+  reply, and that the provider's own output limit is. One hint per episode: a reply that ends normally clears the
+  episode. The same line goes to the host log at `warn` level.
+
 ## [0.7.1] - 2026-10-21
 
 ### Fixed

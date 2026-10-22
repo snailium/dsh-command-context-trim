@@ -28,6 +28,25 @@ test('budget and retention scale from the declared window', () => {
 	assert.throws(() => budgetFor(8192, resolveConfig({})), /leaves no room inside the 8192-token window/);
 });
 
+test('the budget reserves the route output allowance, not only the configured floor', () => {
+	const config = resolveConfig({});
+	// A route that allows 32768 output tokens must keep room for them: a provider
+	// rejects a request whose prompt plus its own allowance exceeds the window.
+	const window = 262144;
+	const budget = budgetFor(window, config, 32768);
+	assert.equal(budget, Math.floor((window - 32768) * 0.9));
+	assert.ok(budget + 32768 <= window, 'the request and the output fit the window');
+	// The configured floor still applies to a route that declares nothing.
+	assert.equal(budgetFor(window, config), Math.floor((window - 8192) * 0.9));
+	// A smaller declared allowance never shrinks the reserve below the floor.
+	assert.equal(budgetFor(window, config, 4096), Math.floor((window - 8192) * 0.9));
+	// A route whose allowance eats the window has no budget at all.
+	assert.throws(() => budgetFor(65536, config, 65536), /leaves no room inside the 65536-token window/);
+	// The production route whose allowance dominates its window: 81920 with 65536
+	// reserved leaves 16384 for the request, not the 66355 the floor alone allowed.
+	assert.equal(budgetFor(81920, config, 65536), Math.floor((81920 - 65536) * 0.9));
+});
+
 test('compaction tuning: the ratio is bounded and the route is all-or-nothing', () => {
 	const resolved = resolveConfig({ compactionRoute: { provider: 'opencode-go-v41', model: 'deepseek-v4.1-flash' } });
 	assert.deepEqual({ ...resolved.compactionRoute }, { provider: 'opencode-go-v41', model: 'deepseek-v4.1-flash' });

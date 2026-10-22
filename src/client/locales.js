@@ -20,7 +20,8 @@ export const en = {
 	minTailTokens: 'Retained floor',
 	minTailTokensHint: 'Absolute floor for that retained tail, in tokens.',
 	reserveOutputTokens: 'Output reserve',
-	reserveOutputTokensHint: 'Tokens kept available for the model\u2019s own reply.',
+	reserveOutputTokensHint:
+		'Tokens kept available for the model\u2019s own reply. The route\u2019s own output allowance is reserved on top of this floor, so the request and the reply it may produce fit the window together.',
 	protectHeadNodes: 'Protected head nodes',
 	protectHeadNodesHint: 'Leading nodes never trimmed (the task statement itself).',
 	maxAutoTrimRetries: 'Max auto-trim retries',
@@ -98,7 +99,7 @@ export const zh = {
 	minTailTokens: '保留下限',
 	minTailTokensHint: '保留尾部的绝对下限（token）。',
 	reserveOutputTokens: '输出预留',
-	reserveOutputTokensHint: '给模型自己回复留出的 token。',
+	reserveOutputTokensHint: '给模型自己回复留出的 token。这只是下限，路线自己声明的输出额度会额外全额预留，保证请求加上它能生成的回复一起装得进窗口。',
 	protectHeadNodes: '保护开头',
 	protectHeadNodesHint: '开头永不裁剪的节点数（任务说明本身）。',
 	maxAutoTrimRetries: '自动重试上限',

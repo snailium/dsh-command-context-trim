@@ -324,6 +324,33 @@ window that is the point — the summarizer must fit the region it is condensing
 text is replaced by a marker rather than a summary. `/compact` stays available, and the full text remains in the
 durable session log.
 
+## When the provider cuts a reply short
+
+A reply that ends on a length stop is **not an error**: the request succeeded, the provider stopped generating. The
+automatic trim listens for `CONTEXT_WINDOW_EXCEEDED`, so it never sees this case, and the user is left with a turn
+that is silently missing its answer.
+
+The plugin therefore **hints, and never trims**. On an assistant message whose finish chunk reports `max-tokens`, it
+writes one line into the session:
+
+```
+[context-trim] the provider cut the previous reply short (a length stop). The request carried ~251732 tokens of a
+262144-token window, over the 206438-token budget. It was allowed 32768 tokens of output and produced 1. Run /trim to
+shrink the context.
+```
+
+The two numbers are the point, because a length stop has two very different causes:
+
+| The request was… | What stopped the reply | What the hint says |
+|---|---|---|
+| over the budget | the context, most likely | run `/trim` |
+| within the budget | the provider's own output limit | the context is not what stopped it — "continue" is the fix |
+
+One hint per episode: once the provider has cut a reply, the next replies in the same stretch are cut for the same
+reason, and a note per reply would bury the conversation. A reply that ends normally clears the episode. The same line
+is written to the host log at `warn` level, because an unattended observation of the user's context must be visible
+there too.
+
 ## What is protected
 
 | Protected | Why |
@@ -524,8 +551,8 @@ Override on the `context-trim` row of a profile patch (the bundle's own `cordis.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `targetRatio` | `0.9` | `budget = floor((contextWindow - reserveOutputTokens) * targetRatio)` |
-| `reserveOutputTokens` | `8192` | Output space kept for the model's own reply. Keep it plus the provider's own `maxTokens` inside the real window: a 32k server with `maxTokens: 16384` exhausts the window with prompt + output even when every prompt fits |
+| `targetRatio` | `0.9` | `budget = floor((contextWindow - reserve) * targetRatio)`, where `reserve = max(reserveOutputTokens, the route's own output allowance)` |
+| `reserveOutputTokens` | `8192` | Output space kept for the model's own reply. This is a **floor**: the route's own allowance (the request's `maxTokens`, or the adapter's `defaultMaxTokens`) is reserved in full on top of it, because a provider rejects a request whose prompt plus its allowance exceeds the window — a 32k server with `maxTokens: 16384` exhausts the window with prompt + output even when every prompt fits |
 | `retainRatio` / `retainTokens` | `0.16` / — | Recent tail kept verbatim (mutually exclusive forms) |
 | `minTailTokens` | `2048` | Absolute floor for that tail |
 | `protectHeadNodes` | `1` | Leading nodes that are never trimmed |
@@ -829,7 +856,9 @@ releases go out through `.github/workflows/publish.yml`, which is manual-only (`
 | End-to-end in a real 0.1.7 boot (isolated home, mock backend): a request REFUSED at 10,664 tokens came back ACCEPTED at 7,230 after the automatic trim, with `compaction/start` = 0 | ✅ verified |
 | **Tokenizer calibration, measured on a production session** (2 805 requests, 5 routes, replayed through the token meter's own fold): the provider/meter ratio per route | ✅ 1.013–1.324, per-route medians 1.16–1.32 |
 | **Calibration unit tests**: p90-not-mean, the floor at 1.0, the 3-sample bootstrap, the sample window, the route key, the envelope price, a corrupt snapshot ignored | ✅ 17 tests |
-| **Calibration integration against the real `dsh-token-meter`**: a session whose real prompt is over the window is trimmed where the uncalibrated planner reports a fit; an anchored request is never priced below what the provider already charged; the learned factor recovers the density the provider charged (2.400 ± 0.05); the table survives a restart; the repeat-overflow ceiling is derived from the real failing size | ✅ 7 tests |
+| **Calibration integration against the real `dsh-token-meter`**: a session whose real prompt is over the window is trimmed where the uncalibrated planner reports a fit; an anchored request is never priced below what the provider already charged; the learned factor recovers the density the provider charged (2.400 ± 0.05); the table survives a restart; the repeat-overflow ceiling is derived from the real failing size; the budget reserves the route's output allowance | ✅ 8 tests |
+| **Output reserve**: the budget reserves the route's own allowance (the request's `maxTokens`, else the adapter's `defaultMaxTokens`) on top of the configured floor, and the trim's report names it | ✅ 4 tests |
+| **Truncation hint**: a length stop is reported with the request size and the window, the over-budget and within-budget causes are told apart, one hint per episode, and nothing is ever trimmed | ✅ 5 tests |
 | **Calibration end to end in an isolated dsh 0.2.0-rc.2** (own `DSH_HOME`, port 3091, mock provider whose tokenizer is twice as dense as dsh's assumption): the factor is learned from the provider's `usage` and persisted to `<profile>/context-trim-calibration.json` | ✅ learned 2.015–2.052 against a mock density of 2.0 |
 | Same instance, the decisive A/B — the same session and the same window, with and without the learned factor | ✅ uncalibrated: "Already within budget: ~6791 / 11527 … Nothing to trim"; calibrated: "frees ~0 of the ~2408 tokens needed" (13 896 real tokens, 6 791 estimated) |
 
@@ -847,11 +876,19 @@ Every number this plugin computes, with the defaults it starts from. Token-to-ch
 ### 1. The trim budget (what `/trim` fits the surface into)
 
 ```
-usable  = contextWindow − reserveOutputTokens          # reserveOutputTokens: 8192
-budget  = max(1, floor(usable × targetRatio))          # targetRatio: 0.9
-retain  = max(minTailTokens,                          # minTailTokens: 2048
+allowance = max(route.defaultMaxTokens,        # the route's own output allowance
+                the logged header's maxTokens) # the allowance this session actually asks for
+reserve  = max(reserveOutputTokens, allowance) # reserveOutputTokens: 8192, a floor
+usable   = contextWindow − reserve
+budget   = max(1, floor(usable × targetRatio)) # targetRatio: 0.9
+retain   = max(minTailTokens,                          # minTailTokens: 2048
               floor(contextWindow × retainRatio))      # retainRatio: 0.16
 ```
+
+The reserve is the route's whole output allowance, not a guess: a request plus the
+output it may produce has to fit the window, or the provider refuses the request
+(`context window exceeds limit`) — and a reasoning model spends that allowance
+before it writes anything.
 
 `/trim <budget>` (e.g. `/trim 32k`) replaces `budget` outright; `budgetCeiling` then takes
 `min(budget, ceiling)` when the automatic path has to come in under a specific number.

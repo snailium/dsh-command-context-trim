@@ -45,7 +45,7 @@ function meterFor() {
  * A plugin context that keeps the listeners, so the calibration can be driven the way
  * the harness drives it: one `session/event` per committed event.
  */
-function pluginContextFor(meter, { profile } = {}) {
+function pluginContextFor(meter, { profile, modelInfo } = {}) {
 	const commands = new Map();
 	const listeners = new Map();
 	const ctx = {
@@ -70,7 +70,9 @@ function pluginContextFor(meter, { profile } = {}) {
 		},
 		logger: { info: () => undefined, warn: () => undefined },
 		tokenMeter: meter,
-		llm: { resolveModelInfo: async () => ({ context: { contextWindow: 16000 } }) }
+		llm: {
+			resolveModelInfo: async () => modelInfo ?? { context: { contextWindow: 16000 } }
+		}
 	};
 	applyPlugin(ctx, {});
 	return { ctx, commands, listeners };
@@ -349,4 +351,18 @@ test('the repeat overflow retargets to the real failing size, not the estimate',
 		ceiling > realTotal * 0.2,
 		`the ceiling must be a fraction of the real size (~${String(realTotal)}), got ${String(ceiling)}`
 	);
+});
+
+test('the trim budget reserves the route output allowance', async () => {
+	const { meter } = meterFor();
+	const { commands } = pluginContextFor(meter, {
+		modelInfo: { context: { contextWindow: 262144 }, defaultMaxTokens: 32768 }
+	});
+	const session = buildSession({ pairs: 2, requests: 0 });
+
+	const result = await trim(commands, session, 'check');
+	// The budget is 90% of the window minus the route's own output allowance, so the
+	// request and the reply it may produce fit the window together.
+	assert.match(result.text, /\/ 206438 tokens/);
+	assert.match(result.text, /32768 reserved for output/);
 });
